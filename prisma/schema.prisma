@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Papéis dos usuários no sistema
+enum Role {
+  ADMIN
+  MANAGER // Coordenadores/Secretaria
+  TEACHER // Professores
+}
+
+// Usuários (Gestores, Professores)
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(TEACHER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Turmas
+model Class {
+  id          String       @id @default(uuid())
+  name        String       // Ex: "1º Ano A"
+  year        Int          // Ex: 2026
+  course      String       // Ex: "Ensino Médio"
+  shift       String       // Ex: "Manhã"
+  students    Student[]
+  attendances Attendance[]
+  createdAt   DateTime     @default(now())
+}
+
+// Alunos
+model Student {
+  id               String       @id @default(uuid())
+  registration     String       @unique // Matrícula
+  name             String
+  email            String       @unique
+  birthDate        DateTime?    // Data de nascimento
+  biometricDataUrl String?      // Onde a foto vai ficar salva
+  classId          String
+  class            Class        @relation(fields: [classId], references: [id])
+  attendances      Attendance[]
+  alerts           Alert[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+// Status da chamada
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED // Falta justificada
+}
+
+// Registro de Frequência
+model Attendance {
+  id        String           @id @default(uuid())
+  date      DateTime         @default(now())
+  status    AttendanceStatus
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id])
+  classId   String
+  class     Class            @relation(fields: [classId], references: [id])
+
+  @@unique([studentId, date]) // Impede duas chamadas no mesmo dia pro mesmo aluno
+}
+
+// Status do alerta
+enum AlertStatus {
+  PENDING
+  RESOLVED
+}
+
+// Alertas de Risco de Evasão
+model Alert {
+  id          String      @id @default(uuid())
+  reason      String      // Ex: "4 faltas consecutivas"
+  status      AlertStatus @default(PENDING)
+  studentId   String
+  student     Student     @relation(fields: [studentId], references: [id])
+  createdAt   DateTime    @default(now())
+  resolvedAt  DateTime?
+}

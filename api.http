@@ -1,0 +1,62 @@
+### 1. Testar se o servidor está vivo
+GET http://localhost:3333/api/status
+
+### 2. Cadastrar a nossa primeira Turma
+POST http://localhost:3333/api/classes
+Content-Type: application/json
+
+{
+  "name": "1º Ano A",
+  "year": 2026,
+  "course": "Ensino Médio",
+  "shift": "Tarde"
+}
+
+### 3. Listar todas as Turmas cadastradas
+GET http://localhost:3333/api/classes
+
+### 4. Cadastrar um Aluno
+POST http://localhost:3333/api/students
+Content-Type: application/json
+
+{
+  "registration": "2026001",
+  "name": "João da Silva",
+  "email": "joao@email.com",
+  "birthDate": "2010-05-15T00:00:00Z",
+  "classId": "7497a23a-f471-49fa-9591-c739b6e396c2"
+}
+
+### 5. Listar todos os Alunos (com os dados da turma)
+GET http://localhost:3333/api/students
+
+### 6. Registrar Falta (Isso deve gerar um alerta automático!)
+POST http://localhost:3333/api/attendances
+Content-Type: application/json
+
+{
+  "studentId": "08d0fdce-61a4-4c5e-85ef-a2e4cded67bc",
+  "classId": "7497a23a-f471-49fa-9591-c739b6e396c2",
+  "status": "ABSENT"
+}
+
+### 7. Ver painel de Alertas
+GET http://localhost:3333/api/alerts
+
+### 8. Testar Upload de Biometria (Foto do Aluno)
+PATCH http://localhost:3333/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/biometry
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="photo"; filename="foto.jpg"
+Content-Type: image/jpeg
+
+< ./foto.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### 9. Testar Listagem do Dashboard (Alunos com Frequência e Risco)
+GET http://localhost:3333/api/students
+
+### 10. Testar Histórico de Presença do Aluno (Para o Calendário do Modal)
+# Substitua o ID abaixo pelo ID real de um aluno cadastrado
+GET http://localhost:3333/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/attendance-history?month=8&year=2026
