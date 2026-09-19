@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ClassController } from '../controllers/ClassController.js';
 import { StudentController } from '../controllers/StudentController.js';
 import { AttendanceController } from '../controllers/AttendanceController.js';
+import { AuthController } from '../controllers/AuthController.js';
 import { upload } from '../middlewares/upload.js';
 
 const routes = Router();
@@ -10,6 +11,15 @@ const routes = Router();
 routes.get('/api/status', (req, res) => {
   res.json({ message: "O backend do PresenSee está vivo e estruturado!" });
 });
+
+
+// SEGURANÇA E AUTENTICAÇÃO
+
+routes.post('/api/login', AuthController.login);
+
+
+
+// ROTAS DO SISTEMA
 
 // Turmas
 routes.post('/api/classes', ClassController.create);

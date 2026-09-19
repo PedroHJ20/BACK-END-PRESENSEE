@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -43,6 +43,28 @@ export class AuthController {
 
     } catch (error) {
       return res.status(500).json({ error: 'Erro interno no servidor.' });
+    }
+  }
+
+  static async setup(req: Request, res: Response) {
+    const { name, email, password, role } = req.body;
+
+    try {
+      // O número 10 é o "salt rounds", determinando o nível de complexidade da criptografia
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          password: hashedPassword,
+          role: role || 'ADMIN'
+        }
+      });
+
+      return res.status(201).json({ message: 'Administrador criado!', userId: user.id });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao criar administrador.' });
     }
   }
 }

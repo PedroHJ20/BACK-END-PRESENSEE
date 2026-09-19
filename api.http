@@ -62,3 +62,23 @@ GET https://back-end-presensee.onrender.com/api/students
 ### 10. Testar Histórico de Presença do Aluno (Para o Calendário do Modal)
 # Substitua o ID abaixo pelo ID real de um aluno cadastrado
 GET https://back-end-presensee.onrender.com/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/attendance-history?month=9&year=2026
+
+### 11. Setup Temporário do Admin (APAGAR DEPOIS)
+POST http://localhost:3333/api/admin/setup
+Content-Type: application/json
+
+{
+  "name": "Pedro Henrique",
+  "email": "admin@presensee.com",
+  "password": "senha_segura_123",
+  "role": "ADMIN"
+}
+
+### 12. Testar Login Oficial
+POST http://localhost:3333/api/login
+Content-Type: application/json
+
+{
+  "email": "admin@presensee.com",
+  "password": "senha_segura_123"
+}
