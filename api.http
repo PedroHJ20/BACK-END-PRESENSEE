@@ -45,7 +45,7 @@ GET http://localhost:3333/api/alerts
 
 ### 8. Testar Upload de Biometria (Foto do Aluno)
 ### Enviar Foto para a Nuvem
-PATCH https://back-end-presensee.onrender.com/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/biometric
+PATCH https://back-end-presensee.onrender.com/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/biometry
 Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
 
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
@@ -61,4 +61,4 @@ GET https://back-end-presensee.onrender.com/api/students
 
 ### 10. Testar Histórico de Presença do Aluno (Para o Calendário do Modal)
 # Substitua o ID abaixo pelo ID real de um aluno cadastrado
-GET https://back-end-presensee.onrender.com/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/attendance-history?month=8&year=2026
+GET https://back-end-presensee.onrender.com/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/attendance-history?month=9&year=2026
