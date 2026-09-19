@@ -57,7 +57,8 @@ Content-Type: image/jpeg
 
 
 ### 9. Testar Listagem do Dashboard (Alunos com Frequência e Risco)
-GET https://back-end-presensee.onrender.com/api/students
+GET http://localhost:3333/api/students
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImEwYjM0OWQ1LWY0YTAtNDY2Zi04MTZhLTEzNzNhY2ZiMDlkZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc4OTg1MDQ1OCwiZXhwIjoxNzg5ODc5MjU4fQ.3SNjgYYIb4d5jtDcvA4cYJpSDfTAwe86JQ6dGHkFQxo
 
 ### 10. Testar Histórico de Presença do Aluno (Para o Calendário do Modal)
 # Substitua o ID abaixo pelo ID real de um aluno cadastrado
