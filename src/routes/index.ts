@@ -4,23 +4,34 @@ import { StudentController } from '../controllers/StudentController.js';
 import { AttendanceController } from '../controllers/AttendanceController.js';
 import { AuthController } from '../controllers/AuthController.js';
 import { upload } from '../middlewares/upload.js';
-import { authMiddleware } from '../middlewares/authMiddleware.js'; // 1. Importamos o segurança
+import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const routes = Router();
 
-
+// ==========================================
+// ZONA PÚBLICA (Qualquer um pode acessar)
+// ==========================================
 routes.get('/api/status', (req, res) => {
   res.json({ message: "O backend do PresenSee está vivo e estruturado!" });
 });
 
 routes.post('/api/login', AuthController.login);
 
+// ROTA TEMPORÁRIA: Recriar o administrador após o reset do banco
+// ATENÇÃO: Apague esta linha assim que recriar o usuário no api.http!
 
 
+
+// ==========================================
+// CATRACA ELETRÔNICA
+// ==========================================
+// A partir desta linha, TODAS as rotas exigem o Token JWT no cabeçalho
 routes.use(authMiddleware);
 
 
-
+// ==========================================
+// ZONA PROTEGIDA (Acesso restrito)
+// ==========================================
 // Turmas
 routes.post('/api/classes', ClassController.create);
 routes.get('/api/classes', ClassController.index);

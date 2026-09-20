@@ -12,9 +12,10 @@ enum Role {
   ADMIN
   MANAGER // Coordenadores/Secretaria
   TEACHER // Professores
+  MONITOR // Monitores de risco de evasão
 }
 
-// Usuários (Gestores, Professores)
+// Usuários (Gestores, Professores, Monitores)
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -23,6 +24,8 @@ model User {
   role      Role     @default(TEACHER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("usuarios")
 }
 
 // Turmas
@@ -35,6 +38,8 @@ model Class {
   students    Student[]
   attendances Attendance[]
   createdAt   DateTime     @default(now())
+
+  @@map("turmas")
 }
 
 // Alunos
@@ -44,13 +49,21 @@ model Student {
   name             String
   email            String       @unique
   birthDate        DateTime?    // Data de nascimento
-  biometricDataUrl String?      // Onde a foto vai ficar salva
+  biometricDataUrl String?      // Onde a foto vai ficar salva (Cloudinary)
+  biometricEncoding String?     // Matriz de números do Python (ex: "[0.12, -0.45...]")
+  
   classId          String
   class            Class        @relation(fields: [classId], references: [id])
+  
   attendances      Attendance[]
   alerts           Alert[]
+  grades           Grade[]
+  incidents        Incident[]
+  
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
+
+  @@map("alunos")
 }
 
 // Status da chamada
@@ -71,6 +84,7 @@ model Attendance {
   class     Class            @relation(fields: [classId], references: [id])
 
   @@unique([studentId, date]) // Impede duas chamadas no mesmo dia pro mesmo aluno
+  @@map("chamadas")
 }
 
 // Status do alerta
@@ -81,11 +95,43 @@ enum AlertStatus {
 
 // Alertas de Risco de Evasão
 model Alert {
-  id          String      @id @default(uuid())
-  reason      String      // Ex: "4 faltas consecutivas"
-  status      AlertStatus @default(PENDING)
+  id         String      @id @default(uuid())
+  reason     String      // Ex: "4 faltas consecutivas"
+  status     AlertStatus @default(PENDING)
+  studentId  String
+  student    Student     @relation(fields: [studentId], references: [id])
+  createdAt  DateTime    @default(now())
+  resolvedAt DateTime?
+
+  @@map("alertas")
+}
+
+// ==========================================
+// AVALIAÇÕES (Para cruzar com as faltas)
+// ==========================================
+model Grade {
+  id        String   @id @default(uuid())
+  subject   String   // Ex: "Matemática", "Português"
+  value     Float    // Ex: 8.5
+  date      DateTime @default(now())
+  
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("notas")
+}
+
+// ==========================================
+// OCORRÊNCIAS (Para o painel do Monitor)
+// ==========================================
+model Incident {
+  id          String   @id @default(uuid())
+  type        String   // Ex: "Atraso", "Falta Injustificada", "Evasão"
+  description String   // Detalhe do que aconteceu
+  date        DateTime @default(now())
+  
   studentId   String
-  student     Student     @relation(fields: [studentId], references: [id])
-  createdAt   DateTime    @default(now())
-  resolvedAt  DateTime?
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("ocorrencias")
 }
