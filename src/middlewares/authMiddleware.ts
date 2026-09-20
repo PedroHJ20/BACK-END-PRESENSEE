@@ -14,9 +14,11 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
   const [, token] = authHeader.split(' ');
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    // Avisamos ao TypeScript que o token é uma string e usamos a variável da linha 4
+    const decoded = jwt.verify(token as string, JWT_SECRET);
+
     // Libera a catraca para a rota continuar funcionando
-    return next(); 
+    return next();
   } catch (err) {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }

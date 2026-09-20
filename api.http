@@ -4,6 +4,7 @@ GET http://localhost:3333/api/status
 ### 2. Cadastrar a nossa primeira Turma
 POST http://localhost:3333/api/classes
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc4OTkzNDY5OSwiZXhwIjoxNzg5OTYzNDk5fQ.Q07lYN2QkWwCz1n9ST0gW_x1Id0Lodlt2o9tt1v6Srk
 
 {
   "name": "1º Ano A",
@@ -18,13 +19,14 @@ GET http://localhost:3333/api/classes
 ### 4. Cadastrar um Aluno
 POST http://localhost:3333/api/students
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc4OTkzNDY5OSwiZXhwIjoxNzg5OTYzNDk5fQ.Q07lYN2QkWwCz1n9ST0gW_x1Id0Lodlt2o9tt1v6Srk
 
 {
   "registration": "2026001",
   "name": "João da Silva",
   "email": "joao@email.com",
   "birthDate": "2010-05-15T00:00:00Z",
-  "classId": "7497a23a-f471-49fa-9591-c739b6e396c2"
+  "classId": "cbef5ae3-93bd-41eb-b4e5-919d51874d72"
 }
 
 ### 5. Listar todos os Alunos (com os dados da turma)
@@ -45,7 +47,8 @@ GET http://localhost:3333/api/alerts
 
 ### 8. Testar Upload de Biometria (Foto do Aluno)
 ### Enviar Foto para a Nuvem
-PATCH https://back-end-presensee.onrender.com/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/biometry
+PATCH http://localhost:3333/api/students/d8f10531-f504-4040-9087-db1c2a8927ad/biometry
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc4OTkzNDY5OSwiZXhwIjoxNzg5OTYzNDk5fQ.Q07lYN2QkWwCz1n9ST0gW_x1Id0Lodlt2o9tt1v6Srk
 Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
 
 ------WebKitFormBoundary7MA4YWxkTrZu0gW

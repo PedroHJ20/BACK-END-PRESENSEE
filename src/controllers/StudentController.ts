@@ -19,7 +19,7 @@ export const StudentController = {
       
       res.status(201).json(newStudent);
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao criar aluno:", error);
       res.status(500).json({ error: "Erro ao cadastrar o aluno. Verifique os dados." });
     }
   },
@@ -63,7 +63,7 @@ export const StudentController = {
 
       res.json(studentsWithDashboardData);
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao listar alunos:", error);
       res.status(500).json({ error: "Erro ao buscar os alunos." });
     }
   },
@@ -72,26 +72,27 @@ export const StudentController = {
   async uploadBiometry(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const file = req.file;
 
-      if (!file) {
-        return res.status(400).json({ error: "Nenhum arquivo de imagem foi enviado." });
+      if (!req.file) {
+        return res.status(400).json({ error: "Nenhuma imagem foi enviada." });
       }
 
-      const biometricDataUrl = `/uploads/${file.filename}`;
+      // O multer-storage-cloudinary coloca o link final (URL) diretamente no 'req.file.path'
+      const imageUrl = req.file.path; 
 
-      const updatedStudent = await prisma.student.update({
+      const student = await prisma.student.update({
         where: { id },
-        data: { biometricDataUrl }
+        data: { biometricDataUrl: imageUrl },
       });
 
-      res.json({
-        message: "Foto biométrica cadastrada com sucesso!",
-        student: updatedStudent
+      return res.json({ 
+        message: "Biometria atualizada com sucesso na nuvem!",
+        student 
       });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Erro ao salvar a biometria do aluno." });
+      // Registo de erro detalhado para diagnosticar problemas com o Cloudinary
+      console.error("Erro detalhado no uploadBiometry:", JSON.stringify(error, null, 2));
+      return res.status(500).json({ error: "Erro ao atualizar biometria." });
     }
   },
 
@@ -128,7 +129,7 @@ export const StudentController = {
 
       res.json(history);
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao buscar histórico:", error);
       res.status(500).json({ error: "Erro ao buscar o histórico de presença." });
     }
   }
