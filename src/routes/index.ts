@@ -39,7 +39,15 @@ routes.get('/api/classes', ClassController.index);
 // Alunos e Histórico
 routes.post('/api/students', StudentController.create);
 routes.get('/api/students', StudentController.index); 
-routes.patch('/api/students/:id/biometry', upload.single('photo'), StudentController.uploadBiometry);
+routes.patch('/api/students/:id/biometry', (req, res, next) => {
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      console.error("Erro real do Cloudinary/Multer:", err);
+      return res.status(500).json({ error: "Falha na nuvem", detalhes: err.message || err });
+    }
+    next();
+  });
+}, StudentController.uploadBiometry);
 routes.get('/api/students/:id/attendance-history', StudentController.attendanceHistory); 
 
 // Frequência e Alertas

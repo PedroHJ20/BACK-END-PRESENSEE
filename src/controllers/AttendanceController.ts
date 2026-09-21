@@ -2,41 +2,33 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 
 export const AttendanceController = {
-  // Registrar chamada e gerar alerta se houver falta
+  // 1. Registrar chamada automaticamente (via câmera)
   async create(req: Request, res: Response) {
     try {
-      const { studentId, classId, status } = req.body;
+      // A câmera só precisa enviar quem é o aluno e de qual turma ele é.
+      // O 'status' não é mais recebido, pois é sempre PRESENTE.
+      const { studentId, classId } = req.body;
       
       const attendance = await prisma.attendance.create({
         data: {
           studentId,
           classId,
-          status, // PRESENT, ABSENT ou EXCUSED
+          status: 'PRESENT', // Assumimos PRESENTE automaticamente
+          date: new Date()   // Carimba o dia e hora exatos do reconhecimento
         }
       });
-
-      // Lógica de Evasão: Se faltou, gera alerta automático
-      if (status === 'ABSENT') {
-        await prisma.alert.create({
-          data: {
-            reason: "Falta registrada hoje. Possível risco de evasão.",
-            studentId: studentId,
-            status: "PENDING"
-          }
-        });
-      }
       
       res.status(201).json({ 
-        message: "Chamada registrada com sucesso!", 
+        message: "Presença registrada com sucesso pela câmera!", 
         attendance 
       });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Erro ao registrar a frequência." });
+      console.error("Erro ao registrar presença:", error);
+      res.status(500).json({ error: "Erro ao processar o check-in da câmera." });
     }
   },
 
-  // Listar todos os alertas de evasão para a coordenação
+  // 2. Listar todos os alertas de evasão para a coordenação
   async listAlerts(req: Request, res: Response) {
     try {
       const alerts = await prisma.alert.findMany({
@@ -46,7 +38,7 @@ export const AttendanceController = {
       });
       res.json(alerts);
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao buscar alertas:", error);
       res.status(500).json({ error: "Erro ao buscar alertas." });
     }
   }
