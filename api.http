@@ -1,10 +1,10 @@
 ### 1. Testar se o servidor está vivo
-GET http://localhost:3333/api/status
+GET https://back-end-presensee.onrender.com/api/status
 
 ### 2. Cadastrar a nossa primeira Turma
-POST http://localhost:3333/api/classes
+POST https://back-end-presensee.onrender.com/api/classes
 Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc4OTkzNDY5OSwiZXhwIjoxNzg5OTYzNDk5fQ.Q07lYN2QkWwCz1n9ST0gW_x1Id0Lodlt2o9tt1v6Srk
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 
 {
   "name": "1º Ano A",
@@ -14,12 +14,13 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlL
 }
 
 ### 3. Listar todas as Turmas cadastradas
-GET http://localhost:3333/api/classes
+GET https://back-end-presensee.onrender.com/api/classes
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 
 ### 4. Cadastrar um Aluno
-POST http://localhost:3333/api/students
+POST https://back-end-presensee.onrender.com/api/students
 Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc4OTkzNDY5OSwiZXhwIjoxNzg5OTYzNDk5fQ.Q07lYN2QkWwCz1n9ST0gW_x1Id0Lodlt2o9tt1v6Srk
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 
 {
   "registration": "2026001",
@@ -30,25 +31,27 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlL
 }
 
 ### 5. Listar todos os Alunos (com os dados da turma)
-GET http://localhost:3333/api/students
+GET https://back-end-presensee.onrender.com/api/students
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 
-### 6. Registrar Falta (Isso deve gerar um alerta automático!)
-POST http://localhost:3333/api/attendances
+### 6. Registrar Chamada (Check-in da Câmera)
+POST https://back-end-presensee.onrender.com/api/attendances
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 Content-Type: application/json
 
 {
-  "studentId": "08d0fdce-61a4-4c5e-85ef-a2e4cded67bc",
-  "classId": "7497a23a-f471-49fa-9591-c739b6e396c2",
-  "status": "ABSENT"
+  "studentId": "d8f10531-f504-4040-9087-db1c2a8927ad",
+  "classId": "cbef5ae3-93bd-41eb-b4e5-919d51874d72",
+  "status": "PRESENT"
 }
 
 ### 7. Ver painel de Alertas
-GET http://localhost:3333/api/alerts
+GET https://back-end-presensee.onrender.com/api/alerts
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 
 ### 8. Testar Upload de Biometria (Foto do Aluno)
-### Enviar Foto para a Nuvem
-PATCH http://localhost:3333/api/students/d8f10531-f504-4040-9087-db1c2a8927ad/biometry
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDAyMTk5NiwiZXhwIjoxNzkwMDUwNzk2fQ.Y4-u4HEchZn_8YXHA2TP6-7ALIOeHgI9HeVTs7OCmhA
+PATCH https://back-end-presensee.onrender.com/api/students/d8f10531-f504-4040-9087-db1c2a8927ad/biometry
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
 
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
@@ -58,17 +61,16 @@ Content-Type: image/jpeg
 < C:/Users/Pedro/Downloads/PresenSee RF/alunos/pedro.jpg
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--
 
+### 9. Testar Listagem do Dashboard
+GET https://back-end-presensee.onrender.com/api/students
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 
-### 9. Testar Listagem do Dashboard (Alunos com Frequência e Risco)
-GET http://localhost:3333/api/students
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDAyMTk5NiwiZXhwIjoxNzkwMDUwNzk2fQ.Y4-u4HEchZn_8YXHA2TP6-7ALIOeHgI9HeVTs7OCmhA
-
-### 10. Testar Histórico de Presença do Aluno (Para o Calendário do Modal)
-# Substitua o ID abaixo pelo ID real de um aluno cadastrado
+### 10. Testar Histórico de Presença do Aluno
 GET https://back-end-presensee.onrender.com/api/students/08d0fdce-61a4-4c5e-85ef-a2e4cded67bc/attendance-history?month=9&year=2026
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjUyNTc1ZTVlLTI3ZmYtNDdiOS04MmI1LWM3ZDA2Mzg4NTBjZiIsInJvbGUiOiJBRE1JTiIsIm5hbWUiOiJQZWRybyBIZW5yaXF1ZSIsImlhdCI6MTc5MDA5NTg0NywiZXhwIjoxNzkwMTI0NjQ3fQ.4OTIW3wS4ouNvWWTolT5aubVeC2C1naUt0VsaDWXFro
 
-### 11. Setup Temporário do Admin (APAGAR DEPOIS)
-POST http://localhost:3333/api/admin/setup
+### 11. Setup Temporário do Admin
+POST https://back-end-presensee.onrender.com/api/admin/setup
 Content-Type: application/json
 
 {
@@ -79,7 +81,7 @@ Content-Type: application/json
 }
 
 ### 12. Testar Login Oficial
-POST http://localhost:3333/api/login
+POST https://back-end-presensee.onrender.com/api/login
 Content-Type: application/json
 
 {

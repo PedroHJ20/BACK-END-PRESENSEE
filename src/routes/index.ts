@@ -18,7 +18,6 @@ routes.get('/api/status', (req, res) => {
 routes.post('/api/login', AuthController.login);
 
 // ROTA TEMPORÁRIA: Recriar o administrador após o reset do banco
-// ATENÇÃO: Apague esta linha assim que recriar o usuário no api.http!
 
 
 

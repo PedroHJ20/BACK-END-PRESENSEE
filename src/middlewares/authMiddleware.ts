@@ -14,7 +14,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
   const [, token] = authHeader.split(' ');
 
   try {
-    // Avisamos ao TypeScript que o token é uma string e usamos a variável da linha 4
+    
     const decoded = jwt.verify(token as string, JWT_SECRET);
 
     // Libera a catraca para a rota continuar funcionando
