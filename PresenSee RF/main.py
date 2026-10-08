@@ -16,7 +16,7 @@ CLASS_ID = "7497a23a-f471-49fa-9591-c739b6e396c2" # Turma 1º Ano A
 # Credenciais da Câmera (O script usará isto para obter o token sozinho)
 CREDENCIAIS_CAMERA = {
     "email": "admin@presensee.com",
-    "password": "senha_segura_123"
+    "password": os.getenv("CAMERA_PASSWORD") # Correção SonarQube: Uso de variável de ambiente
 }
 
 print('🔐 Autenticando a câmera no sistema...')
@@ -41,8 +41,6 @@ except Exception as e:
     print(f"❌ Erro ao tentar conectar para login: {e}")
     exit()
 
-
-
 ALUNOS_DB = {}
 images = []
 classNames = []
@@ -62,7 +60,7 @@ try:
             if foto_url:
                 link_completo = f"{BASE_URL}{foto_url}"
                 print(f"⏳ Baixando biometria de: {nome}...")
-                # Não precisa de token para baixar a imagem direto do Cloudinary, mas se a rota exigir, pode manter
+                
                 img_resp = requests.get(link_completo)
                 
                 if img_resp.status_code == 200:
