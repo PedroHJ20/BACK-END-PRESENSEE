@@ -88,3 +88,37 @@ Content-Type: application/json
   "email": "admin@presensee.com",
   "password": "senha_segura_123"
 }
+
+
+### Criar Usuário Local
+POST http://localhost:3333/api/setup
+Content-Type: application/json
+
+{
+  "name": "Pedro Henrique",
+  "email": "admin@presensee.com",
+  "password": "123",
+  "role": "ADMIN"
+}
+
+### Criar Usuário Gestor (Painel Operacional)
+POST http://localhost:3333/api/setup
+Content-Type: application/json
+
+{
+  "name": "Gestor PresenSee",
+  "email": "gestor@presensee.com",
+  "password": "123",
+  "role": "GESTOR"
+}
+
+### Criar Usuário Gestor (Painel Operacional)
+POST http://localhost:3333/api/setup
+Content-Type: application/json
+
+{
+  "name": "Gestor PresenSee",
+  "email": "gestor@presensee.com",
+  "password": "123",
+  "role": "MANAGER"
+}

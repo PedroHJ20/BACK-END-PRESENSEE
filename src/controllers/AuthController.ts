@@ -1,58 +1,63 @@
 import type { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta-super-segura-presensee';
+const JWT_SECRET = process.env.JWT_SECRET as string;
 
 export class AuthController {
+  // Rota de Login Oficial
   static async login(req: Request, res: Response) {
     const { email, password } = req.body;
 
     try {
-      // 1. Verifica se o usuário existe
+      // 1. Busca o utilizador (Ajuste prisma.user para prisma.admin se sua tabela tiver outro nome)
       const user = await prisma.user.findUnique({ where: { email } });
+
       if (!user) {
-        return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+        return res.status(401).json({ error: 'Email ou senha inválidos.' });
       }
 
-      // 2. Compara a senha digitada com a senha criptografada no banco
-      const validPassword = await bcrypt.compare(password, user.password);
-      if (!validPassword) {
-        return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+      // 2. Verifica a senha criptografada
+      const isValidPassword = await bcrypt.compare(password, user.password);
+
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Email ou senha inválidos.' });
       }
 
-      // 3. Gera o Token de Acesso (Crachá digital)
+      // 3. Gera o Token JWT
       const token = jwt.sign(
-        { id: user.id, role: user.role, name: user.name },
+        { id: user.id, name: user.name, role: user.role },
         JWT_SECRET,
-        { expiresIn: '8h' } // Token expira no final do expediente
+        { expiresIn: '1d' }
       );
 
-      // 4. Devolve o token e os dados básicos para o Front-end montar a tela
       return res.json({
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        },
+        user: { id: user.id, name: user.name, email: user.email, role: user.role },
         token
       });
-
     } catch (error) {
-      return res.status(500).json({ error: 'Erro interno no servidor.' });
+      console.error("ERRO DETALHADO NO LOGIN:", error);
+      return res.status(500).json({ error: 'Erro interno ao realizar login.' });
     }
   }
 
+  // Rota Temporária de Setup (Para criar o 1º administrador)
   static async setup(req: Request, res: Response) {
     const { name, email, password, role } = req.body;
 
     try {
-      // O número 10 é o "salt rounds", determinando o nível de complexidade da criptografia
+      const userExists = await prisma.user.findUnique({ where: { email } });
+
+      if (userExists) {
+        return res.status(400).json({ error: 'Usuário já existe no banco de dados.' });
+      }
+
+      // Criptografa a senha antes de salvar
       const hashedPassword = await bcrypt.hash(password, 10);
 
+      // Salva no banco de dados
       const user = await prisma.user.create({
         data: {
           name,
@@ -62,8 +67,9 @@ export class AuthController {
         }
       });
 
-      return res.status(201).json({ message: 'Administrador criado!', userId: user.id });
+      return res.status(201).json({ message: 'Administrador criado com sucesso!', user: { id: user.id, email: user.email } });
     } catch (error) {
+      console.error("ERRO DETALHADO NO SETUP:", error);
       return res.status(500).json({ error: 'Erro ao criar administrador.' });
     }
   }
