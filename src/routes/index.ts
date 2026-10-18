@@ -3,6 +3,9 @@ import { ClassController } from '../controllers/ClassController.js';
 import { StudentController } from '../controllers/StudentController.js';
 import { AttendanceController } from '../controllers/AttendanceController.js';
 import { AuthController } from '../controllers/AuthController.js';
+import { EventController } from '../controllers/EventController.js';
+import { IncidentController } from '../controllers/IncidentController.js';
+import { DashboardController } from '../controllers/DashboardController.js';
 import { upload } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -16,10 +19,7 @@ routes.get('/api/status', (req, res) => {
 });
 
 routes.post('/api/login', AuthController.login);
-
-// ROTA TEMPORÁRIA: Recriar o administrador após o reset do banco
-
-
+routes.post('/api/setup', AuthController.setup); // Rota para recriar o admin se necessário
 
 // ==========================================
 // CATRACA ELETRÔNICA
@@ -27,10 +27,13 @@ routes.post('/api/login', AuthController.login);
 // A partir desta linha, TODAS as rotas exigem o Token JWT no cabeçalho
 routes.use(authMiddleware);
 
-
 // ==========================================
 // ZONA PROTEGIDA (Acesso restrito)
 // ==========================================
+
+// Dashboard (Home e Relatórios)
+routes.get('/api/dashboard', DashboardController.getSummary);
+
 // Turmas
 routes.post('/api/classes', ClassController.create);
 routes.get('/api/classes', ClassController.index);
@@ -52,5 +55,18 @@ routes.get('/api/students/:id/attendance-history', StudentController.attendanceH
 // Frequência e Alertas
 routes.post('/api/attendances', AttendanceController.create);
 routes.get('/api/alerts', AttendanceController.listAlerts);
+
+// ==========================================
+// DIÁRIO DO MONITOR E INTERVENÇÕES
+// ==========================================
+routes.get('/api/incidents', IncidentController.index);
+routes.post('/api/incidents', IncidentController.create);
+
+// ==========================================
+// CALENDÁRIO ESCOLAR (Eventos)
+// ==========================================
+routes.get('/api/events', EventController.index);
+routes.post('/api/events', EventController.create);
+routes.delete('/api/events/:id', EventController.delete);
 
 export default routes;
