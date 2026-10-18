@@ -135,3 +135,17 @@ model Incident {
 
   @@map("ocorrencias")
 }
+
+model Event {
+  id             String   @id @default(uuid())
+  title          String   
+  startDate      DateTime 
+  endDate        DateTime 
+  type           String   
+  excusesAbsence Boolean  @default(false) 
+  audience       String   
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("eventos")
+}
