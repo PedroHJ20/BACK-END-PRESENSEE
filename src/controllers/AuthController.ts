@@ -38,8 +38,12 @@ export class AuthController {
         token
       });
     } catch (error) {
-      console.error("ERRO DETALHADO NO LOGIN:", error);
-      return res.status(500).json({ error: 'Erro interno ao realizar login.' });
+      console.error('Erro no login:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        body: req.body
+      });
+      return res.status(500).json({ error: 'Erro interno ao realizar login.' + (error instanceof Error ? error.message : String(error)) });
     }
   }
 
@@ -69,7 +73,11 @@ export class AuthController {
 
       return res.status(201).json({ message: 'Administrador criado com sucesso!', user: { id: user.id, email: user.email } });
     } catch (error) {
-      console.error("ERRO DETALHADO NO SETUP:", error);
+      console.error('Erro no setup de administrador:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        body: req.body
+      });
       return res.status(500).json({ error: 'Erro ao criar administrador.' });
     }
   }
