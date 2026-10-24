@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // Papéis dos usuários no sistema
@@ -22,6 +23,10 @@ model User {
   email     String   @unique
   password  String
   role      Role     @default(TEACHER)
+  
+  escolaId  String?
+  escola    Escola?  @relation(fields: [escolaId], references: [id])
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -44,24 +49,24 @@ model Class {
 
 // Alunos
 model Student {
-  id               String       @id @default(uuid())
-  registration     String       @unique // Matrícula
-  name             String
-  email            String       @unique
-  birthDate        DateTime?    // Data de nascimento
-  biometricDataUrl String?      // Onde a foto vai ficar salva (Cloudinary)
-  biometricEncoding String?     // Matriz de números do Python (ex: "[0.12, -0.45...]")
+  id                String       @id @default(uuid())
+  registration      String       @unique // Matrícula
+  name              String
+  email             String       @unique
+  birthDate         DateTime?    // Data de nascimento
+  biometricDataUrl  String?      // Onde a foto vai ficar salva (Cloudinary)
+  biometricEncoding String?      // Matriz de números do Python (ex: "[0.12, -0.45...]")
   
-  classId          String
-  class            Class        @relation(fields: [classId], references: [id])
+  classId           String
+  class             Class        @relation(fields: [classId], references: [id])
   
-  attendances      Attendance[]
-  alerts           Alert[]
-  grades           Grade[]
-  incidents        Incident[]
+  attendances       Attendance[]
+  alerts            Alert[]
+  grades            Grade[]
+  incidents         Incident[]
   
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   @@map("alunos")
 }
@@ -137,15 +142,27 @@ model Incident {
 }
 
 model Event {
-  id             String   @id @default(uuid())
-  title          String   
-  startDate      DateTime 
-  endDate        DateTime 
-  type           String   
-  excusesAbsence Boolean  @default(false) 
-  audience       String   
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(uuid())
+  title           String   
+  startDate       DateTime 
+  endDate         DateTime 
+  type            String   
+  excusesAbsence  Boolean  @default(false) 
+  audience        String   
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("eventos")
+}
+
+model Escola {
+  id        String   @id @default(uuid())
+  nome      String
+  municipio String
+  rede      String
+  status    String   @default("Pendente")
+  users     User[]
+  createdAt DateTime @default(now())
+
+  @@map("escolas")
 }
