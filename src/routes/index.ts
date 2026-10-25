@@ -6,6 +6,7 @@ import { AuthController } from '../controllers/AuthController.js';
 import { EventController } from '../controllers/EventController.js';
 import { IncidentController } from '../controllers/IncidentController.js';
 import { DashboardController } from '../controllers/DashboardController.js';
+import { SchoolController } from '../controllers/SchoolController.js';
 import { upload } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -33,6 +34,12 @@ routes.use(authMiddleware);
 
 // Dashboard (Home e Relatórios)
 routes.get('/api/dashboard', DashboardController.getSummary);
+
+// ==========================================
+// GESTÃO DE ESCOLAS (Superadmin)
+// ==========================================
+routes.post('/api/escolas', SchoolController.create);
+routes.get('/api/escolas', SchoolController.index);
 
 // Turmas
 routes.post('/api/classes', ClassController.create);

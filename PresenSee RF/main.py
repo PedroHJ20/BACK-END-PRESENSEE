@@ -58,7 +58,7 @@ try:
             foto_url = aluno.get('biometricDataUrl')
 
             if foto_url:
-                link_completo = f"{BASE_URL}{foto_url}"
+                link_completo = foto_url if foto_url.startswith("http") else f"{BASE_URL}{foto_url}"
                 print(f"⏳ Baixando biometria de: {nome}...")
                 
                 img_resp = requests.get(link_completo)
