@@ -1,12 +1,14 @@
-import { Request, Response } from "express";
-import { prismaClient } from "../lib/prisma"; // Ajuste o caminho se o seu client exportar apenas "prisma"
+import type { Request, Response } from "express";
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export class SchoolController {
   static async create(req: Request, res: Response) {
     try {
       const { nome, municipio, rede, status } = req.body;
       
-      const escola = await prismaClient.escola.create({
+      const escola = await prisma.escola.create({
         data: {
           nome,
           municipio,
@@ -24,14 +26,48 @@ export class SchoolController {
 
   static async index(req: Request, res: Response) {
     try {
-      const escolas = await prismaClient.escola.findMany({
-        include: { users: true } // Retorna os gestores vinculados
+      const escolas = await prisma.escola.findMany({
+        include: { users: true } 
       });
       
       return res.json(escolas);
     } catch (error) {
       console.error("Erro ao buscar escolas:", error);
       return res.status(500).json({ error: "Erro interno ao listar as escolas." });
+    }
+  }
+
+  static async updateStatus(req: Request, res: Response) {
+    try {
+      // Tipagem explícita adicionada aqui
+      const id = req.params.id as string;
+      const { status } = req.body;
+      
+      const escola = await prisma.escola.update({
+        where: { id },
+        data: { status }
+      });
+      
+      return res.json(escola);
+    } catch (error) {
+      console.error("Erro ao atualizar status da escola:", error);
+      return res.status(500).json({ error: "Erro ao atualizar status." });
+    }
+  }
+
+  static async delete(req: Request, res: Response) {
+    try {
+      // Tipagem explícita adicionada aqui
+      const id = req.params.id as string;
+      
+      await prisma.escola.delete({ 
+        where: { id } 
+      });
+      
+      return res.status(204).send();
+    } catch (error) {
+      console.error("Erro ao excluir escola:", error);
+      return res.status(500).json({ error: "Erro ao excluir escola." });
     }
   }
 }

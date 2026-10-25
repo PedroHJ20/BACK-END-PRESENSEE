@@ -7,52 +7,49 @@ import { EventController } from '../controllers/EventController.js';
 import { IncidentController } from '../controllers/IncidentController.js';
 import { DashboardController } from '../controllers/DashboardController.js';
 import { SchoolController } from '../controllers/SchoolController.js';
+import { UserController } from '../controllers/UserController.js';
 import { upload } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const routes = Router();
 
-// ==========================================
-// ZONA PÚBLICA (Qualquer um pode acessar)
-// ==========================================
+// Rotas Públicas
 routes.get('/api/status', (req, res) => {
-  res.json({ message: "O backend do PresenSee está vivo e estruturado!" });
+  res.json({ message: "O backend do PresenSee está ativo!" });
 });
-
 routes.post('/api/login', AuthController.login);
-routes.post('/api/setup', AuthController.setup); // Rota para recriar o admin se necessário
+routes.post('/api/setup', AuthController.setup); 
 
-// ==========================================
-// CATRACA ELETRÔNICA
-// ==========================================
-// A partir desta linha, TODAS as rotas exigem o Token JWT no cabeçalho
+// Middleware de Autenticação (Requer Token JWT)
 routes.use(authMiddleware);
 
-// ==========================================
-// ZONA PROTEGIDA (Acesso restrito)
-// ==========================================
+// Rotas Protegidas
 
-// Dashboard (Home e Relatórios)
+// Dashboard
 routes.get('/api/dashboard', DashboardController.getSummary);
 
-// ==========================================
-// GESTÃO DE ESCOLAS (Superadmin)
-// ==========================================
+// Escolas (Admin)
 routes.post('/api/escolas', SchoolController.create);
 routes.get('/api/escolas', SchoolController.index);
+routes.patch('/api/escolas/:id/status', SchoolController.updateStatus);
+routes.delete('/api/escolas/:id', SchoolController.delete);
+
+// Usuários / Gestores (Admin)
+routes.post('/api/users', UserController.create);
+routes.get('/api/users', UserController.index);
 
 // Turmas
 routes.post('/api/classes', ClassController.create);
 routes.get('/api/classes', ClassController.index);
 
-// Alunos e Histórico
+// Alunos
 routes.post('/api/students', StudentController.create);
 routes.get('/api/students', StudentController.index); 
 routes.patch('/api/students/:id/biometry', (req, res, next) => {
   upload.single('photo')(req, res, (err) => {
     if (err) {
-      console.error("Erro real do Cloudinary/Multer:", err);
-      return res.status(500).json({ error: "Falha na nuvem", detalhes: err.message || err });
+      console.error("Erro no upload:", err);
+      return res.status(500).json({ error: "Falha no upload", detalhes: err.message || err });
     }
     next();
   });
@@ -63,15 +60,11 @@ routes.get('/api/students/:id/attendance-history', StudentController.attendanceH
 routes.post('/api/attendances', AttendanceController.create);
 routes.get('/api/alerts', AttendanceController.listAlerts);
 
-// ==========================================
-// DIÁRIO DO MONITOR E INTERVENÇÕES
-// ==========================================
+// Ocorrências
 routes.get('/api/incidents', IncidentController.index);
 routes.post('/api/incidents', IncidentController.create);
 
-// ==========================================
-// CALENDÁRIO ESCOLAR (Eventos)
-// ==========================================
+// Eventos
 routes.get('/api/events', EventController.index);
 routes.post('/api/events', EventController.create);
 routes.delete('/api/events/:id', EventController.delete);
