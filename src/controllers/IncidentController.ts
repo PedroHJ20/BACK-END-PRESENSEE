@@ -25,45 +25,46 @@ export class IncidentController {
   }
 
   static async create(req: Request, res: Response) {
-    const { type, description, studentId, date, category, title, isPending, priority } = req.body;
+    const { type, description, studentId, date, title, priority } = req.body;
 
     try {
+      // Embutimos os dados extras na descrição para respeitar o esquema do banco
+      let descFinal = description || '';
+      if (title && title !== descFinal) descFinal = `[${title}] ${descFinal}`;
+      if (priority) descFinal = `[Prioridade: ${priority}] ${descFinal}`;
+
       const payloadData: any = {
-        type,
-        description,
+        type: type || 'NOTA',
+        description: descFinal,
       };
 
       if (studentId) payloadData.studentId = studentId;
       if (date) payloadData.date = new Date(date);
-      if (category) payloadData.category = category;
-      if (title) payloadData.title = title;
-      if (isPending !== undefined) payloadData.isPending = isPending;
-      if (priority) payloadData.priority = priority;
 
       const incident = await prisma.incident.create({
         data: payloadData,
         include: {
-          student: {
-            include: { class: true }
-          }
+          student: { include: { class: true } }
         }
       });
       return res.status(201).json(incident);
     } catch (error) {
-      console.error("Erro Prisma ao salvar:", error);
-      return res.status(500).json({ error: 'Erro ao registrar intervenção ou anotação.' });
+      console.error("Erro Prisma ao salvar ocorrencia:", error);
+      return res.status(500).json({ error: 'Erro ao registrar ocorrência.' });
     }
   }
 
   static async update(req: Request, res: Response) {
     const id = req.params.id as string;
-    const { resolved, priority, feita } = req.body;
+    const { resolved, description, feita } = req.body;
     
     try {
       const updateData: any = {};
-      if (resolved !== undefined) updateData.resolved = resolved;
-      if (feita !== undefined) updateData.resolved = feita; 
-      if (priority !== undefined) updateData.priority = priority;
+      if (description !== undefined) updateData.description = description;
+      
+      const estadoResolvido = resolved !== undefined ? resolved : feita;
+      if (estadoResolvido === true) updateData.type = 'RESOLVIDO';
+      if (estadoResolvido === false) updateData.type = 'PENDENCIA';
 
       const incident = await prisma.incident.update({
         where: { id },
@@ -77,7 +78,6 @@ export class IncidentController {
 
   static async delete(req: Request, res: Response) {
     const id = req.params.id as string;
-    
     try {
       await prisma.incident.delete({ where: { id } });
       return res.status(204).send();

@@ -60,15 +60,16 @@ routes.get('/api/students/:id/attendance-history', StudentController.attendanceH
 routes.post('/api/attendances', AttendanceController.create);
 routes.get('/api/alerts', AttendanceController.listAlerts);
 
-// Ocorrências
+// Ocorrências (Diário do Monitor e Intervenções)
 routes.get('/api/incidents', IncidentController.index);
 routes.post('/api/incidents', IncidentController.create);
 routes.patch('/api/incidents/:id', IncidentController.update);
 routes.delete('/api/incidents/:id', IncidentController.delete);
 
-// Eventos
+// Eventos (Calendário Escolar)
 routes.get('/api/events', EventController.index);
 routes.post('/api/events', EventController.create);
+routes.patch('/api/events/:id', EventController.update);
 routes.delete('/api/events/:id', EventController.delete);
 
 export default routes;
