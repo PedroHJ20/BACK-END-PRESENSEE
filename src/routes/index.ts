@@ -63,6 +63,8 @@ routes.get('/api/alerts', AttendanceController.listAlerts);
 // Ocorrências
 routes.get('/api/incidents', IncidentController.index);
 routes.post('/api/incidents', IncidentController.create);
+routes.patch('/api/incidents/:id', IncidentController.update);
+routes.delete('/api/incidents/:id', IncidentController.delete);
 
 // Eventos
 routes.get('/api/events', EventController.index);
