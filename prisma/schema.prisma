@@ -135,22 +135,22 @@ model Incident {
   description String   // Detalhe do que aconteceu
   date        DateTime @default(now())
   
-  studentId   String
-  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId   String?  // <-- AGORA OPCIONAL (Permite notas no Diário sem aluno)
+  student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade) // <-- AGORA OPCIONAL
 
   @@map("ocorrencias")
 }
 
 model Event {
-  id              String   @id @default(uuid())
-  title           String   
-  startDate       DateTime 
-  endDate         DateTime 
-  type            String   
-  excusesAbsence  Boolean  @default(false) 
-  audience        String   
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  title          String   
+  startDate      DateTime 
+  endDate        DateTime 
+  type           String   
+  excusesAbsence Boolean  @default(false) 
+  audience       String   
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("eventos")
 }
