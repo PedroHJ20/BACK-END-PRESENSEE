@@ -2,13 +2,14 @@ import type { Request, Response } from "express";
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const escolaDb = (prisma as any).escola;
 
 export class SchoolController {
   static async create(req: Request, res: Response) {
     try {
       const { nome, municipio, rede, status } = req.body;
       
-      const escola = await prisma.escola.create({
+      const escola = await escolaDb.create({
         data: {
           nome,
           municipio,
@@ -26,7 +27,7 @@ export class SchoolController {
 
   static async index(req: Request, res: Response) {
     try {
-      const escolas = await prisma.escola.findMany({
+      const escolas = await escolaDb.findMany({
         include: { users: true } 
       });
       
@@ -39,11 +40,10 @@ export class SchoolController {
 
   static async updateStatus(req: Request, res: Response) {
     try {
-      // Tipagem explícita adicionada aqui
       const id = req.params.id as string;
       const { status } = req.body;
       
-      const escola = await prisma.escola.update({
+      const escola = await escolaDb.update({
         where: { id },
         data: { status }
       });
@@ -57,10 +57,9 @@ export class SchoolController {
 
   static async delete(req: Request, res: Response) {
     try {
-      // Tipagem explícita adicionada aqui
       const id = req.params.id as string;
       
-      await prisma.escola.delete({ 
+      await escolaDb.delete({ 
         where: { id } 
       });
       
