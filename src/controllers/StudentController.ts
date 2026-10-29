@@ -68,7 +68,35 @@ export const StudentController = {
     }
   },
 
-  // 3. Cadastrar/Atualizar a foto biométrica do aluno
+  // 3. Buscar o perfil completo de um único aluno
+  async show(req: Request, res: Response) {
+    // CORREÇÃO APLICADA AQUI:
+    const id = req.params.id as string;
+    
+    try {
+      const student = await prisma.student.findUnique({
+        where: { id },
+        include: {
+          class: true,
+          attendances: true,
+          incidents: true,
+          alerts: true,
+          grades: true
+        }
+      });
+
+      if (!student) {
+        return res.status(404).json({ error: "Aluno não encontrado" });
+      }
+      
+      return res.json(student);
+    } catch (error) {
+      console.error("Erro ao buscar perfil do aluno:", error);
+      return res.status(500).json({ error: "Erro interno ao buscar aluno" });
+    }
+  },
+
+  // 4. Cadastrar/Atualizar a foto biométrica do aluno
   async uploadBiometry(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
@@ -96,17 +124,15 @@ export const StudentController = {
     }
   },
 
- // 4. Histórico detalhado para o Modal de Calendário
+  // 5. Histórico detalhado para o Modal de Calendário
   async attendanceHistory(req: Request, res: Response) {
     try {
-      // Adicionamos 'as string' para forçar a tipagem correta e acalmar o TypeScript
       const id = req.params.id as string;
       const month = req.query.month as string | undefined;
       const year = req.query.year as string | undefined;
 
       let dateFilter = {};
       
-      // Se informou mês e ano (ex: month=8 & year=2026), cria a regra de filtro
       if (month && year) {
         const startDate = new Date(Number(year), Number(month) - 1, 1);
         const endDate = new Date(Number(year), Number(month), 1);
@@ -119,7 +145,7 @@ export const StudentController = {
 
       const history = await prisma.attendance.findMany({
         where: {
-          studentId: id, // Agora o TypeScript tem certeza que 'id' é uma string válida
+          studentId: id,
           ...(Object.keys(dateFilter).length > 0 && { date: dateFilter })
         },
         orderBy: {
