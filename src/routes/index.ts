@@ -20,10 +20,10 @@ routes.get('/api/status', (req, res) => {
 routes.post('/api/login', AuthController.login);
 routes.post('/api/setup', AuthController.setup); 
 
-// Middleware de Autenticação (Requer Token JWT)
-routes.use(authMiddleware);
+// Middleware de Autenticação (DESATIVADO TEMPORARIAMENTE PARA GRAVAÇÃO DO VÍDEO)
+// routes.use(authMiddleware); 
 
-// Rotas Protegidas
+// Rotas Protegidas (AGORA PÚBLICAS TEMPORARIAMENTE)
 
 // Dashboard
 routes.get('/api/dashboard', DashboardController.getSummary);
@@ -45,6 +45,7 @@ routes.get('/api/classes', ClassController.index);
 // Alunos
 routes.post('/api/students', StudentController.create);
 routes.get('/api/students', StudentController.index); 
+routes.get('/api/students/:id', StudentController.show); // <-- Nova Rota para Perfil do Aluno adicionada
 routes.patch('/api/students/:id/biometry', (req, res, next) => {
   upload.single('photo')(req, res, (err) => {
     if (err) {
