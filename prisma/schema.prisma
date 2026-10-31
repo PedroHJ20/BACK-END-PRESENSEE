@@ -166,3 +166,29 @@ model Escola {
 
   @@map("escolas")
 }
+
+// ==========================================
+// CHAMADOS (Central de Suporte)
+// ==========================================
+model Chamado {
+  id           String   @id @default(uuid())
+  titulo       String
+  descricao    String
+  escola       String?
+  solicitante  String
+  categoria    String
+  responsavel  String?
+  prioridade   String   @default("Normal")
+  status       String   @default("Aberto")
+  avaliacao    Int?
+
+  // Armazenando arrays complexos (mensagens, histórico, anexos) como JSON no PostgreSQL
+  mensagens    Json     @default("[]")
+  historico    Json     @default("[]")
+  notificacoes Json     @default("[]")
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("chamados")
+}

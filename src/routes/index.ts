@@ -8,6 +8,7 @@ import { IncidentController } from '../controllers/IncidentController.js';
 import { DashboardController } from '../controllers/DashboardController.js';
 import { SchoolController } from '../controllers/SchoolController.js';
 import { UserController } from '../controllers/UserController.js';
+import { ChamadoController } from '../controllers/ChamadoController.js';
 import { upload } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -37,6 +38,11 @@ routes.delete('/api/escolas/:id', SchoolController.delete);
 // Usuários / Gestores (Admin)
 routes.post('/api/users', UserController.create);
 routes.get('/api/users', UserController.index);
+
+// Chamados de Suporte (Admin)
+routes.get('/api/chamados', ChamadoController.index);
+routes.post('/api/chamados', ChamadoController.create);
+routes.patch('/api/chamados/:id', ChamadoController.update);
 
 // Turmas
 routes.post('/api/classes', ClassController.create);
