@@ -20,10 +20,10 @@ routes.get('/api/status', (req, res) => {
 routes.post('/api/login', AuthController.login);
 routes.post('/api/setup', AuthController.setup); 
 
-// Middleware de Autenticação (DESATIVADO TEMPORARIAMENTE PARA GRAVAÇÃO DO VÍDEO)
-// routes.use(authMiddleware); 
+// Middleware de Autenticação (Requer Token JWT)
+routes.use(authMiddleware);
 
-// Rotas Protegidas (AGORA PÚBLICAS TEMPORARIAMENTE)
+// Rotas Protegidas
 
 // Dashboard
 routes.get('/api/dashboard', DashboardController.getSummary);
