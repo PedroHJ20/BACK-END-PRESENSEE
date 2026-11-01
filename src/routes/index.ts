@@ -10,6 +10,7 @@ import { SchoolController } from '../controllers/SchoolController.js';
 import { UserController } from '../controllers/UserController.js';
 import { ChamadoController } from '../controllers/ChamadoController.js';
 import { ComunicadoController } from '../controllers/ComunicadoController.js';
+import { HealthController } from '../controllers/HealthController.js';
 import { upload } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -50,6 +51,9 @@ routes.get('/api/comunicados', ComunicadoController.index);
 routes.post('/api/comunicados', ComunicadoController.create);
 routes.patch('/api/comunicados/:id', ComunicadoController.update);
 routes.delete('/api/comunicados/:id', ComunicadoController.delete);
+
+// Saúde do Sistema (Admin)
+routes.get('/api/health', HealthController.check);
 
 // Turmas
 routes.post('/api/classes', ClassController.create);
