@@ -11,6 +11,7 @@ import { UserController } from '../controllers/UserController.js';
 import { ChamadoController } from '../controllers/ChamadoController.js';
 import { ComunicadoController } from '../controllers/ComunicadoController.js';
 import { HealthController } from '../controllers/HealthController.js';
+import { AuditoriaController } from '../controllers/AuditoriaController.js';
 import { upload } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -54,6 +55,9 @@ routes.delete('/api/comunicados/:id', ComunicadoController.delete);
 
 // Saúde do Sistema (Admin)
 routes.get('/api/health', HealthController.check);
+
+// Auditoria (Admin)
+routes.get('/api/auditoria', AuditoriaController.index);
 
 // Turmas
 routes.post('/api/classes', ClassController.create);

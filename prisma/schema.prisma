@@ -212,3 +212,18 @@ model Comunicado {
 
   @@map("comunicados")
 }
+
+// ==========================================
+// AUDITORIA (Painel Administrativo)
+// ==========================================
+model Auditoria {
+  id          String   @id @default(uuid())
+  tipo        String   // Ex: "Cadastro", "Alteração", "Exclusão"
+  titulo      String   // Ex: "Nova escola cadastrada"
+  descricao   String?  // Ex: "Escola ETEPAM inserida no sistema."
+  entidade    String?  // Ex: "Escola", "Usuario", "Chamado"
+  responsavel String   @default("Sistema")
+  criadoEm    DateTime @default(now())
+
+  @@map("auditoria")
+}
