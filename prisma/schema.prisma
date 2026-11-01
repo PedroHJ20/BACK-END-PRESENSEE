@@ -192,3 +192,23 @@ model Chamado {
 
   @@map("chamados")
 }
+
+// ==========================================
+// COMUNICADOS (Painel Administrativo)
+// ==========================================
+model Comunicado {
+  id          String    @id @default(uuid())
+  titulo      String
+  mensagem    String
+  tipo        String    @default("Informativo")
+  publico     String    @default("Todas as escolas")
+  escolas     String[]  // Array de IDs de escolas, se público for "Escolas específicas"
+  status      String    @default("Rascunho")
+  inicio      DateTime?
+  fim         DateTime?
+  criadoEm    DateTime  @default(now())
+  alteradoEm  DateTime  @updatedAt
+  publicadoEm DateTime?
+
+  @@map("comunicados")
+}
