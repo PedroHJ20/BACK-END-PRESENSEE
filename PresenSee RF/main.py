@@ -6,7 +6,6 @@ import os
 import requests
 
 # CONFIGURAÇÕES DA API (NUVEM)
-
 BASE_URL = "https://back-end-presensee.onrender.com"
 API_LOGIN = f"{BASE_URL}/api/login"
 API_ATTENDANCES = f"{BASE_URL}/api/attendances"
@@ -83,9 +82,7 @@ if not images:
     print("Nenhum aluno com foto válida foi carregado. A câmera não pode reconhecer ninguém. Encerrando.")
     exit()
 
-
 # RECONHECIMENTO FACIAL
-
 def findEncodings(images):
     encodeList = []
     for img in images:
@@ -100,18 +97,24 @@ encodeListKnown = findEncodings(images)
 print('🎥 Sistema pronto. Abrindo a câmera...\n')
 
 def registrar_presenca(name):
-    if not os.path.isfile('diario_classe.csv'):
-        open('diario_classe.csv', 'w').close()
+    hoje = datetime.now().strftime('%Y-%m-%d')
+    arquivo_csv = 'diario_classe.csv'
+    
+    if not os.path.isfile(arquivo_csv):
+        with open(arquivo_csv, 'w') as f:
+            f.write('Nome,Data,Hora\n') # Adiciona cabeçalho
+            
+    with open(arquivo_csv, 'r+') as f:
+        linhas = f.readlines()
         
-    with open('diario_classe.csv', 'r+') as f:
-        myDataList = f.readlines()
-        nameList = [line.split(',')[0] for line in myDataList]
+        # Verifica se o aluno já tem presença registada HOJE
+        ja_registrado_hoje = any(f"{name},{hoje}" in linha for linha in linhas)
         
-        if name not in nameList:
-            now = datetime.now()
-            dtString = now.strftime('%H:%M:%S')
-            f.writelines(f'{name},{dtString}\n')
-            print(f"📸 Câmera: {name} detectado às {dtString}")
+        if not ja_registrado_hoje:
+            agora = datetime.now()
+            hora = agora.strftime('%H:%M:%S')
+            f.writelines(f'{name},{hoje},{hora}\n')
+            print(f"📸 Câmera: {name} detectado em {hoje} às {hora}")
             
             student_id = ALUNOS_DB.get(name)
             if student_id:
@@ -134,6 +137,10 @@ cap = cv2.VideoCapture(0)
 
 while True:
     success, img = cap.read()
+    if not success:
+        print("❌ Erro ao aceder à câmara.")
+        break
+        
     imgS = cv2.resize(img, (0, 0), None, 0.25, 0.25)
     imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
 
