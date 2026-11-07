@@ -12,7 +12,7 @@ export class AuthController {
     const { email, password } = req.body;
 
     try {
-      // 1. Busca o utilizador (Ajuste prisma.user para prisma.admin se sua tabela tiver outro nome)
+      // 1. Busca o utilizador
       const user = await prisma.user.findUnique({ where: { email } });
 
       if (!user) {
@@ -33,8 +33,16 @@ export class AuthController {
         { expiresIn: '1d' }
       );
 
+      // 4. Devolve todos os dados necessários para o perfil no front-end
       return res.json({
-        user: { id: user.id, name: user.name, email: user.email, role: user.role },
+        user: { 
+          id: user.id, 
+          name: user.name, 
+          email: user.email, 
+          role: user.role,
+          telefone: user.telefone, // <-- Adicionado
+          avatar: user.avatar      // <-- Adicionado
+        },
         token
       });
     } catch (error) {
