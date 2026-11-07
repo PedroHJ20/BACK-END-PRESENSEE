@@ -24,6 +24,10 @@ model User {
   password  String
   role      Role     @default(TEACHER)
   
+  // Novos campos para o perfil
+  telefone  String?
+  avatar    String? // Vai guardar a imagem em formato base64
+  
   escolaId  String?
   escola    Escola?  @relation(fields: [escolaId], references: [id])
   

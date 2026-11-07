@@ -49,15 +49,15 @@ export class UserController {
   static async update(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const { name, email } = req.body; 
-      // O telefone foi extraído do front-end, mas como não existe no model User do Prisma, 
-      // atualizamos apenas nome e email na base de dados.
+      const { name, email, telefone, avatar } = req.body; 
       
       const user = await prisma.user.update({
         where: { id },
         data: {
           name,
-          email
+          email,
+          telefone,
+          avatar
         }
       });
       
