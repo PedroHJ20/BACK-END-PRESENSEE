@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
 
-// Função auxiliar para descobrir quem está fazendo a requisição
 async function getLoggedUser(req: Request) {
   let userId = null;
   const authHeader = req.headers.authorization;
@@ -16,7 +15,7 @@ async function getLoggedUser(req: Request) {
         const decoded = jwt.verify(token, JWT_SECRET) as any;
         userId = decoded.id;
       } catch (e) {
-        // Falha silenciosa no helper, será tratado pelas rotas
+        // Falha silenciosa no helper
       }
     }
   }
@@ -32,34 +31,67 @@ async function getLoggedUser(req: Request) {
 }
 
 export const StudentController = {
-  // 1. Cadastrar um novo aluno
+  // 1. Cadastrar um novo aluno (COM TRATAMENTO DE ERROS ROBUSTO)
   async create(req: Request, res: Response) {
     try {
-      const { registration, name, email, birthDate, classId } = req.body;
+      const { registration, name, email, birthDate } = req.body;
       
-      const user = await getLoggedUser(req);
-      let escolaId = req.body.escolaId; // O Admin pode mandar a escola no body
+      // Mapeamento flexível para aceitar como o frontend envia a turma
+      const classId = req.body.classId || req.body.turmaId || req.body.turma;
 
-      // Se for gestor, FORÇA o aluno a ser matriculado na escola dele
+      if (!classId) {
+        return res.status(400).json({ error: "A turma não foi identificada na requisição." });
+      }
+
+      const user = await getLoggedUser(req);
+      let escolaId = req.body.escolaId;
+
       if (user && user.role !== 'ADMIN') {
         escolaId = user.escolaId;
+        if (!escolaId) {
+          return res.status(400).json({ error: "O gestor atual não tem uma escola vinculada." });
+        }
+      }
+
+      // Se o email vier vazio (já que no front é opcional), gera um email fictício único
+      const finalEmail = (email && email.trim() !== "") 
+        ? email 
+        : `${registration}@aluno.presensee.com`;
+
+      // Previne falhas caso a data venha num formato inválido
+      let parsedDate = null;
+      if (birthDate) {
+        const dateObj = new Date(birthDate);
+        if (!isNaN(dateObj.getTime())) parsedDate = dateObj;
       }
 
       const newStudent = await prisma.student.create({
         data: {
-          registration,
-          name,
-          email,
-          birthDate: birthDate ? new Date(birthDate) : null,
-          classId,
-          escolaId // <-- Agora o aluno fica amarrado à escola!
+          registration: String(registration),
+          name: String(name),
+          email: finalEmail,
+          birthDate: parsedDate,
+          classId: String(classId),
+          escolaId
         }
       });
       
-      res.status(201).json(newStudent);
-    } catch (error) {
-      console.error("Erro ao criar aluno:", error);
-      res.status(500).json({ error: "Erro ao cadastrar o aluno. Verifique os dados." });
+      return res.status(201).json(newStudent);
+    } catch (error: any) {
+      console.error("Erro detalhado ao criar aluno:", error);
+      
+      // Interceta o erro de campo único do Prisma (ex: Matrícula ou Email já existentes)
+      if (error.code === 'P2002') {
+         const campo = error.meta?.target || "desconhecido";
+         return res.status(400).json({ error: `Já existe um registro com este dado: ${campo}` });
+      }
+      
+      // Interceta o erro de Turma ou Escola inexistente (Chave Estrangeira)
+      if (error.code === 'P2003') {
+         return res.status(400).json({ error: "A turma selecionada não existe no banco de dados." });
+      }
+
+      return res.status(500).json({ error: "Erro interno ao cadastrar o aluno.", details: error.message });
     }
   },
 
@@ -71,14 +103,13 @@ export const StudentController = {
 
       if (user && user.role !== 'ADMIN') {
         if (!user.escolaId) {
-          // Gestor sem escola vinculada não vê nenhum aluno
           return res.json([]); 
         }
         filtroEscola = { escolaId: user.escolaId };
       }
 
       const students = await prisma.student.findMany({
-        where: filtroEscola, // <-- Trava de segurança multi-tenant
+        where: filtroEscola,
         include: { 
           class: true,
           attendances: true 
