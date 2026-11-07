@@ -1,5 +1,35 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
+
+// Função auxiliar para descobrir quem está fazendo a requisição
+async function getLoggedUser(req: Request) {
+  let userId = null;
+  const authHeader = req.headers.authorization;
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        userId = decoded.id;
+      } catch (e) {
+        // Falha silenciosa no helper, será tratado pelas rotas
+      }
+    }
+  }
+
+  if (!userId) {
+    userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
+  }
+
+  if (userId) {
+    return await prisma.user.findUnique({ where: { id: userId } });
+  }
+  return null;
+}
 
 export const StudentController = {
   // 1. Cadastrar um novo aluno
@@ -7,13 +37,22 @@ export const StudentController = {
     try {
       const { registration, name, email, birthDate, classId } = req.body;
       
+      const user = await getLoggedUser(req);
+      let escolaId = req.body.escolaId; // O Admin pode mandar a escola no body
+
+      // Se for gestor, FORÇA o aluno a ser matriculado na escola dele
+      if (user && user.role !== 'ADMIN') {
+        escolaId = user.escolaId;
+      }
+
       const newStudent = await prisma.student.create({
         data: {
           registration,
           name,
           email,
           birthDate: birthDate ? new Date(birthDate) : null,
-          classId
+          classId,
+          escolaId // <-- Agora o aluno fica amarrado à escola!
         }
       });
       
@@ -24,13 +63,25 @@ export const StudentController = {
     }
   },
 
-  // 2. Listar todos os alunos com cálculo de Frequência e Risco (Para o Dashboard)
+  // 2. Listar todos os alunos com cálculo de Frequência e Risco (Filtrado por Escola)
   async index(req: Request, res: Response) {
     try {
+      const user = await getLoggedUser(req);
+      let filtroEscola = {};
+
+      if (user && user.role !== 'ADMIN') {
+        if (!user.escolaId) {
+          // Gestor sem escola vinculada não vê nenhum aluno
+          return res.json([]); 
+        }
+        filtroEscola = { escolaId: user.escolaId };
+      }
+
       const students = await prisma.student.findMany({
+        where: filtroEscola, // <-- Trava de segurança multi-tenant
         include: { 
           class: true,
-          attendances: true // Necessário para calcular as porcentagens
+          attendances: true 
         }
       });
 
@@ -38,12 +89,11 @@ export const StudentController = {
         const totalClasses = student.attendances.length;
         const presentClasses = student.attendances.filter(a => a.status === 'PRESENT').length;
 
-        let frequency = 100; // Começa com 100% se não houver registros
+        let frequency = 100;
         if (totalClasses > 0) {
           frequency = Math.round((presentClasses / totalClasses) * 100);
         }
 
-        // Define o Risco
         let risk = 'Baixo';
         if (frequency < 75) {
           risk = 'Alto';
@@ -51,7 +101,6 @@ export const StudentController = {
           risk = 'Médio';
         }
 
-        // Remove o array pesado da resposta final para economizar banda
         const { attendances, ...studentData } = student;
 
         return {
@@ -70,7 +119,6 @@ export const StudentController = {
 
   // 3. Buscar o perfil completo de um único aluno
   async show(req: Request, res: Response) {
-    // CORREÇÃO APLICADA AQUI:
     const id = req.params.id as string;
     
     try {
@@ -105,7 +153,6 @@ export const StudentController = {
         return res.status(400).json({ error: "Nenhuma imagem foi enviada." });
       }
 
-      // O multer-storage-cloudinary coloca o link final (URL) diretamente no 'req.file.path'
       const imageUrl = req.file.path; 
 
       const student = await prisma.student.update({
@@ -118,7 +165,6 @@ export const StudentController = {
         student 
       });
     } catch (error) {
-      // Registo de erro detalhado para diagnosticar problemas com o Cloudinary
       console.error("Erro detalhado no uploadBiometry:", JSON.stringify(error, null, 2));
       return res.status(500).json({ error: "Erro ao atualizar biometria." });
     }
@@ -149,7 +195,7 @@ export const StudentController = {
           ...(Object.keys(dateFilter).length > 0 && { date: dateFilter })
         },
         orderBy: {
-          date: 'asc' // Ordena cronologicamente
+          date: 'asc'
         }
       });
 
