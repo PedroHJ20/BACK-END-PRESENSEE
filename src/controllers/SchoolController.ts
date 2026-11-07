@@ -7,14 +7,27 @@ const escolaDb = (prisma as any).escola;
 export class SchoolController {
   static async create(req: Request, res: Response) {
     try {
-      const { nome, municipio, rede, status } = req.body;
+      // Extraindo todos os campos enviados pelo front-end
+      const { 
+        nome, municipio, rede, status, 
+        inep, cep, logradouro, numero, 
+        complemento, bairro, uf, telefone 
+      } = req.body;
       
       const escola = await escolaDb.create({
         data: {
           nome,
           municipio,
           rede,
-          status: status || "Pendente"
+          status: status || "Pendente",
+          inep,
+          cep,
+          logradouro,
+          numero,
+          complemento,
+          bairro,
+          uf,
+          telefone
         }
       });
       
