@@ -1,22 +1,42 @@
 import type { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
 export class DashboardController {
   static async getSummary(req: Request, res: Response) {
     try {
-      // 1. Identificar o ID do usuário logado (injetado pelo authMiddleware)
-      const userId = (req as any).userId || (req as any).user?.id;
-      let filtroEscola = {}; // Vazio por padrão (mostra tudo se for Admin)
+      let userId = null;
+      
+      const authHeader = req.headers.authorization;
+      // Garante que o cabeçalho existe e tem o formato correto "Bearer <token>"
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        
+        // Só tenta decodificar se o token realmente existir
+        if (token) {
+          try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+            userId = decoded.id;
+          } catch (e) {
+            console.error("Dashboard: Erro ao decodificar token", e);
+          }
+        }
+      }
+
+      // Fallback caso o middleware injete a variável de outra forma
+      if (!userId) {
+        userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
+      }
+
+      let filtroEscola = {}; 
 
       if (userId) {
         const usuarioLogado = await prisma.user.findUnique({ where: { id: userId } });
         
-        // Se for um Gestor/Monitor, obriga a filtrar pela escola dele
         if (usuarioLogado && usuarioLogado.role !== 'ADMIN') {
           if (!usuarioLogado.escolaId) {
-            // Se o gestor não tem escola, retorna o dashboard zerado
             return res.json({
               totalAlunos: 0, alunosAltoRisco: 0, alunosRisco: 0, alunosBaixoRisco: 0,
               taxaFrequenciaGeral: 100, turmas: [], evolucaoRisco: [], frequenciaPorSemana: []
@@ -24,9 +44,10 @@ export class DashboardController {
           }
           filtroEscola = { escolaId: usuarioLogado.escolaId };
         }
+      } else {
+        console.warn("Dashboard: Requisição processada sem identificação de utilizador.");
       }
 
-      // 2. Buscar Alunos aplicando o filtro da escola correspondente
       const students = await prisma.student.findMany({
         where: filtroEscola,
         include: {
@@ -36,7 +57,6 @@ export class DashboardController {
         }
       });
 
-      // 3. Buscar Turmas aplicando o filtro da escola correspondente
       const classes = await prisma.class.findMany({
         where: filtroEscola,
         include: {
