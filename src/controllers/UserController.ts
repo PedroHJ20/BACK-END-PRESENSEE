@@ -45,4 +45,27 @@ export class UserController {
       return res.status(500).json({ error: "Erro ao listar usuários." });
     }
   }
+
+  static async update(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { name, email } = req.body; 
+      // O telefone foi extraído do front-end, mas como não existe no model User do Prisma, 
+      // atualizamos apenas nome e email na base de dados.
+      
+      const user = await prisma.user.update({
+        where: { id },
+        data: {
+          name,
+          email
+        }
+      });
+      
+      const { password: _, ...userSemSenha } = user;
+      return res.json(userSemSenha);
+    } catch (error) {
+      console.error("Erro ao atualizar usuário:", error);
+      return res.status(500).json({ error: "Erro ao atualizar usuário." });
+    }
+  }
 }

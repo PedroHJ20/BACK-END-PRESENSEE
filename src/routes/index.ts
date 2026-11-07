@@ -41,6 +41,7 @@ routes.delete('/api/escolas/:id', SchoolController.delete);
 // Usuários / Gestores (Admin)
 routes.post('/api/users', UserController.create);
 routes.get('/api/users', UserController.index);
+routes.patch('/api/users/:id', UserController.update); // <-- Rota de atualização do perfil
 
 // Chamados de Suporte (Admin)
 routes.get('/api/chamados', ChamadoController.index);
@@ -66,7 +67,7 @@ routes.get('/api/classes', ClassController.index);
 // Alunos
 routes.post('/api/students', StudentController.create);
 routes.get('/api/students', StudentController.index); 
-routes.get('/api/students/:id', StudentController.show); // <-- Nova Rota para Perfil do Aluno adicionada
+routes.get('/api/students/:id', StudentController.show); 
 routes.patch('/api/students/:id/biometry', (req, res, next) => {
   upload.single('photo')(req, res, (err) => {
     if (err) {
