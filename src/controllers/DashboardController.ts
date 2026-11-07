@@ -6,7 +6,29 @@ const prisma = new PrismaClient();
 export class DashboardController {
   static async getSummary(req: Request, res: Response) {
     try {
+      // 1. Identificar o ID do usuário logado (injetado pelo authMiddleware)
+      const userId = (req as any).userId || (req as any).user?.id;
+      let filtroEscola = {}; // Vazio por padrão (mostra tudo se for Admin)
+
+      if (userId) {
+        const usuarioLogado = await prisma.user.findUnique({ where: { id: userId } });
+        
+        // Se for um Gestor/Monitor, obriga a filtrar pela escola dele
+        if (usuarioLogado && usuarioLogado.role !== 'ADMIN') {
+          if (!usuarioLogado.escolaId) {
+            // Se o gestor não tem escola, retorna o dashboard zerado
+            return res.json({
+              totalAlunos: 0, alunosAltoRisco: 0, alunosRisco: 0, alunosBaixoRisco: 0,
+              taxaFrequenciaGeral: 100, turmas: [], evolucaoRisco: [], frequenciaPorSemana: []
+            });
+          }
+          filtroEscola = { escolaId: usuarioLogado.escolaId };
+        }
+      }
+
+      // 2. Buscar Alunos aplicando o filtro da escola correspondente
       const students = await prisma.student.findMany({
+        where: filtroEscola,
         include: {
           attendances: true,
           alerts: { where: { status: 'PENDING' } },
@@ -14,7 +36,9 @@ export class DashboardController {
         }
       });
 
+      // 3. Buscar Turmas aplicando o filtro da escola correspondente
       const classes = await prisma.class.findMany({
+        where: filtroEscola,
         include: {
           students: {
             include: { attendances: true }
@@ -66,7 +90,6 @@ export class DashboardController {
         };
       });
 
-      // Mapeamento exato das chaves que o Dashboard.jsx espera
       return res.json({
         totalAlunos: students.length,
         alunosAltoRisco: highRisk,
@@ -74,7 +97,6 @@ export class DashboardController {
         alunosBaixoRisco: lowRisk,
         taxaFrequenciaGeral: overallFrequency,
         turmas: classesSummary,
-        // Arrays iniciais para renderizar os gráficos de linha/barra no front-end
         evolucaoRisco: [
           { periodo: "Ago", risco: 12 },
           { periodo: "Set", risco: 15 },
@@ -89,6 +111,7 @@ export class DashboardController {
         ]
       });
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao carregar dados do dashboard.' });
     }
   }

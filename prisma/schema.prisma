@@ -44,6 +44,11 @@ model Class {
   year       Int          // Ex: 2026
   course     String       // Ex: "Ensino Médio"
   shift      String       // Ex: "Manhã"
+  
+  // Relacionamento com a Escola
+  escolaId   String?
+  escola     Escola?      @relation(fields: [escolaId], references: [id])
+
   students   Student[]
   attendances Attendance[]
   createdAt  DateTime     @default(now())
@@ -61,6 +66,10 @@ model Student {
   biometricDataUrl  String?      // Onde a foto vai ficar salva (Cloudinary)
   biometricEncoding String?      // Matriz de números do Python (ex: "[0.12, -0.45...]")
   
+  // Relacionamento com a Escola
+  escolaId          String?
+  escola            Escola?      @relation(fields: [escolaId], references: [id])
+
   classId           String
   class             Class        @relation(fields: [classId], references: [id])
   
@@ -166,7 +175,6 @@ model Escola {
   rede        String
   status      String   @default("Pendente")
   
-  // Novos campos adicionados
   inep        String?
   cep         String?
   logradouro  String?
@@ -177,6 +185,9 @@ model Escola {
   telefone    String?
   
   users       User[]
+  classes     Class[]
+  students    Student[]
+  
   createdAt   DateTime @default(now())
 
   @@map("escolas")
