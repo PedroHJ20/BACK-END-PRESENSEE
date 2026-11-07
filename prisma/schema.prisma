@@ -35,14 +35,14 @@ model User {
 
 // Turmas
 model Class {
-  id          String       @id @default(uuid())
-  name        String       // Ex: "1º Ano A"
-  year        Int          // Ex: 2026
-  course      String       // Ex: "Ensino Médio"
-  shift       String       // Ex: "Manhã"
-  students    Student[]
+  id         String       @id @default(uuid())
+  name       String       // Ex: "1º Ano A"
+  year       Int          // Ex: 2026
+  course     String       // Ex: "Ensino Médio"
+  shift      String       // Ex: "Manhã"
+  students   Student[]
   attendances Attendance[]
-  createdAt   DateTime     @default(now())
+  createdAt  DateTime     @default(now())
 
   @@map("turmas")
 }
@@ -142,27 +142,38 @@ model Incident {
 }
 
 model Event {
-  id             String   @id @default(uuid())
-  title          String   
-  startDate      DateTime 
-  endDate        DateTime 
-  type           String   
-  excusesAbsence Boolean  @default(false) 
-  audience       String   
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(uuid())
+  title           String   
+  startDate       DateTime 
+  endDate         DateTime 
+  type            String   
+  excusesAbsence  Boolean  @default(false) 
+  audience        String   
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("eventos")
 }
 
 model Escola {
-  id        String   @id @default(uuid())
-  nome      String
-  municipio String
-  rede      String
-  status    String   @default("Pendente")
-  users     User[]
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  nome        String
+  municipio   String
+  rede        String
+  status      String   @default("Pendente")
+  
+  // Novos campos adicionados
+  inep        String?
+  cep         String?
+  logradouro  String?
+  numero      String?
+  complemento String?
+  bairro      String?
+  uf          String?
+  telefone    String?
+  
+  users       User[]
+  createdAt   DateTime @default(now())
 
   @@map("escolas")
 }
