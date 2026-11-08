@@ -40,21 +40,14 @@ export class IncidentController {
       
       let baseFilter: any = {};
 
-      // Filtro Multi-Tenant
+      // Filtro Multi-Tenant direto na ocorrência
       if (user && user.role !== 'ADMIN') {
         if (!user.escolaId) {
-          return res.json([]); // Gestor sem escola não vê ocorrências
+          return res.json([]); 
         }
-        
-        // Garante que só vê incidentes de alunos que pertencem à sua escola
-        baseFilter = {
-          student: {
-            escolaId: user.escolaId
-          }
-        };
+        baseFilter.escolaId = user.escolaId; 
       }
 
-      // Se um studentId específico foi requisitado (ex: Perfil do Aluno)
       if (studentId) {
         baseFilter.studentId = studentId;
       }
@@ -80,12 +73,14 @@ export class IncidentController {
 
     try {
       const user = await getLoggedUser(req);
+      let escolaId = req.body.escolaId;
 
       // Trava de segurança para Criação
       if (user && user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Gestor sem escola vinculada não pode criar ocorrências." });
         }
+        escolaId = user.escolaId; // <-- Garante a escola do gestor logado
         
         if (studentId) {
           const student = await prisma.student.findUnique({ where: { id: studentId } });
@@ -101,7 +96,6 @@ export class IncidentController {
       }
 
       let descFinal = description || texto || '';
-      
       if (title && !descFinal.includes(title)) descFinal = `[${title}] ${descFinal}`;
       if (category && !descFinal.includes(category)) descFinal = `[${category}] ${descFinal}`;
       if (priority && !descFinal.includes(priority)) descFinal = `[Prioridade: ${priority}] ${descFinal}`;
@@ -109,6 +103,7 @@ export class IncidentController {
       const payloadData: any = {
         type: finalType,
         description: descFinal.trim() || 'Sem descrição',
+        escolaId // <-- Salva a ocorrência diretamente na escola do gestor!
       };
 
       if (studentId) payloadData.studentId = studentId;
@@ -139,12 +134,9 @@ export class IncidentController {
 
       // Trava de segurança para Edição
       if (user && user.role !== 'ADMIN') {
-        const incidentExistente = await prisma.incident.findUnique({ 
-          where: { id },
-          include: { student: true }
-        });
+        const incidentExistente = await prisma.incident.findUnique({ where: { id } });
         
-        if (!incidentExistente || (incidentExistente.student && incidentExistente.student.escolaId !== user.escolaId)) {
+        if (!incidentExistente || incidentExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para editar esta ocorrência." });
         }
       }
@@ -177,12 +169,9 @@ export class IncidentController {
 
       // Trava de segurança para Exclusão
       if (user && user.role !== 'ADMIN') {
-        const incidentExistente = await prisma.incident.findUnique({ 
-          where: { id },
-          include: { student: true }
-        });
+        const incidentExistente = await prisma.incident.findUnique({ where: { id } });
         
-        if (!incidentExistente || (incidentExistente.student && incidentExistente.student.escolaId !== user.escolaId)) {
+        if (!incidentExistente || incidentExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para excluir esta ocorrência." });
         }
       }
