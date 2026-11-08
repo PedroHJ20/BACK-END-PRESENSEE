@@ -41,7 +41,7 @@ export class EventController {
       // Filtro Multi-Tenant: Mostra apenas eventos da escola do gestor logado
       if (user && user.role !== 'ADMIN') {
         if (!user.escolaId) {
-          return res.json([]); // Retorna vazio se não tiver escola
+          return res.json([]); 
         }
         whereClause = { escolaId: user.escolaId };
       }
@@ -76,7 +76,7 @@ export class EventController {
   }
 
   static async create(req: Request, res: Response) {
-    const { title, dates, type, allowance, audience } = req.body;
+    const { title, dates, type, allowance, audience, description, color } = req.body;
 
     try {
       const user = await getLoggedUser(req);
@@ -87,7 +87,7 @@ export class EventController {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Gestor sem escola vinculada não pode criar eventos." });
         }
-        escolaId = user.escolaId; // Força o evento a ser criado para a escola do gestor
+        escolaId = user.escolaId; 
       }
 
       const startDate = dates && dates.length > 0 ? new Date(dates[0]) : new Date();
@@ -97,12 +97,14 @@ export class EventController {
       const event = await prisma.event.create({
         data: {
           title: title || 'Sem título',
+          description: description || null, // Salvando a descrição
+          color: color || null,             // Salvando a cor
           startDate,
           endDate,
           type: type || 'Outro',
           excusesAbsence,
           audience: audience || 'Toda a escola',
-          escolaId // Vincula ao banco de dados
+          escolaId
         }
       });
       return res.status(201).json(event);
@@ -114,7 +116,7 @@ export class EventController {
 
   static async update(req: Request, res: Response) {
     const { id } = req.params;
-    const { title, dates, type, allowance, audience } = req.body;
+    const { title, dates, type, allowance, audience, description, color } = req.body;
     
     try {
       const user = await getLoggedUser(req);
@@ -129,6 +131,8 @@ export class EventController {
 
       const updateData: any = {};
       if (title) updateData.title = title;
+      if (description !== undefined) updateData.description = description; // Atualiza a descrição
+      if (color !== undefined) updateData.color = color;                   // Atualiza a cor
       if (type) updateData.type = type;
       if (audience) updateData.audience = audience;
       if (allowance !== undefined) updateData.excusesAbsence = allowance !== 'nenhum';

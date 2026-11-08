@@ -24,9 +24,8 @@ model User {
   password  String
   role      Role     @default(TEACHER)
   
-  // Novos campos para o perfil
   telefone  String?
-  avatar    String? // Vai guardar a imagem em formato base64
+  avatar    String? // Imagem base64
   
   escolaId  String?
   escola    Escola?  @relation(fields: [escolaId], references: [id])
@@ -45,7 +44,6 @@ model Class {
   course     String       // Ex: "Ensino Médio"
   shift      String       // Ex: "Manhã"
   
-  // Relacionamento com a Escola
   escolaId   String?
   escola     Escola?      @relation(fields: [escolaId], references: [id])
 
@@ -62,11 +60,10 @@ model Student {
   registration      String       @unique // Matrícula
   name              String
   email             String       @unique
-  birthDate         DateTime?    // Data de nascimento
-  biometricDataUrl  String?      // Onde a foto vai ficar salva (Cloudinary)
-  biometricEncoding String?      // Matriz de números do Python (ex: "[0.12, -0.45...]")
+  birthDate         DateTime?    
+  biometricDataUrl  String?      
+  biometricEncoding String?      
   
-  // Relacionamento com a Escola
   escolaId          String?
   escola            Escola?      @relation(fields: [escolaId], references: [id])
 
@@ -101,11 +98,10 @@ model Attendance {
   classId   String
   class     Class            @relation(fields: [classId], references: [id])
 
-  @@unique([studentId, date]) // Impede duas chamadas no mesmo dia pro mesmo aluno
+  @@unique([studentId, date]) 
   @@map("chamadas")
 }
 
-// Status do alerta
 enum AlertStatus {
   PENDING
   RESOLVED
@@ -114,7 +110,7 @@ enum AlertStatus {
 // Alertas de Risco de Evasão
 model Alert {
   id         String      @id @default(uuid())
-  reason     String      // Ex: "4 faltas consecutivas"
+  reason     String      
   status     AlertStatus @default(PENDING)
   studentId  String
   student    Student     @relation(fields: [studentId], references: [id])
@@ -124,13 +120,11 @@ model Alert {
   @@map("alertas")
 }
 
-// ==========================================
-// AVALIAÇÕES (Para cruzar com as faltas)
-// ==========================================
+// Avaliações
 model Grade {
   id        String   @id @default(uuid())
-  subject   String   // Ex: "Matemática", "Português"
-  value     Float    // Ex: 8.5
+  subject   String   
+  value     Float    
   date      DateTime @default(now())
   
   studentId String
@@ -139,38 +133,34 @@ model Grade {
   @@map("notas")
 }
 
-// ==========================================
-// OCORRÊNCIAS (Para o painel do Monitor e Diário)
-// ==========================================
+// Ocorrências (Para o painel do Monitor e Diário)
 model Incident {
   id          String   @id @default(uuid())
-  type        String   // Ex: "Atraso", "Falta Injustificada", "Evasão"
-  description String   // Detalhe do que aconteceu
+  type        String   
+  description String   
   date        DateTime @default(now())
   
-  studentId   String?  // OPCIONAL (Permite notas no Diário sem aluno)
+  studentId   String?  
   student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  // MULTI-TENANT: Relacionamento com a escola (necessário para ocorrências sem aluno)
   escolaId    String?
   escola      Escola?  @relation(fields: [escolaId], references: [id])
 
   @@map("ocorrencias")
 }
 
-// ==========================================
-// CALENDÁRIO & EVENTOS ESCOLARES
-// ==========================================
+// Calendário & Eventos Escolares
 model Event {
   id              String   @id @default(uuid())
   title           String   
+  description     String?  // <-- Adicionado
+  color           String?  // <-- Adicionado
   startDate       DateTime 
   endDate         DateTime 
   type            String   
   excusesAbsence  Boolean  @default(false) 
   audience        String   
   
-  // MULTI-TENANT: Relacionamento com a Escola
   escolaId        String?
   escola          Escola?  @relation(fields: [escolaId], references: [id])
 
@@ -180,9 +170,7 @@ model Event {
   @@map("eventos")
 }
 
-// ==========================================
-// ESCOLAS (Tenant Principal)
-// ==========================================
+// Escolas (Tenant Principal)
 model Escola {
   id          String   @id @default(uuid())
   nome        String
@@ -199,21 +187,18 @@ model Escola {
   uf          String?
   telefone    String?
   
-  // Relacionamentos inversos Multi-Tenant
   users       User[]
   classes     Class[]
   students    Student[]
-  events      Event[]     // Relacionamento inverso para Event
-  incidents   Incident[]  // Relacionamento inverso para Incident
+  events      Event[]     
+  incidents   Incident[]  
   
   createdAt   DateTime @default(now())
 
   @@map("escolas")
 }
 
-// ==========================================
-// CHAMADOS (Central de Suporte)
-// ==========================================
+// Chamados (Central de Suporte)
 model Chamado {
   id          String   @id @default(uuid())
   titulo      String
@@ -226,7 +211,6 @@ model Chamado {
   status      String   @default("Aberto")
   avaliacao   Int?
 
-  // Armazenando arrays complexos (mensagens, histórico, anexos) como JSON no PostgreSQL
   mensagens    Json      @default("[]")
   historico    Json      @default("[]")
   notificacoes Json      @default("[]")
@@ -237,16 +221,14 @@ model Chamado {
   @@map("chamados")
 }
 
-// ==========================================
-// COMUNICADOS (Painel Administrativo)
-// ==========================================
+// Comunicados (Painel Administrativo)
 model Comunicado {
   id          String    @id @default(uuid())
   titulo      String
   mensagem    String
   tipo        String    @default("Informativo")
   publico     String    @default("Todas as escolas")
-  escolas     String[]  // Array de IDs de escolas, se público for "Escolas específicas"
+  escolas     String[]  
   status      String    @default("Rascunho")
   inicio      DateTime?
   fim         DateTime?
@@ -257,15 +239,13 @@ model Comunicado {
   @@map("comunicados")
 }
 
-// ==========================================
-// AUDITORIA (Painel Administrativo)
-// ==========================================
+// Auditoria (Painel Administrativo)
 model Auditoria {
   id          String   @id @default(uuid())
-  tipo        String   // Ex: "Cadastro", "Alteração", "Exclusão"
-  titulo      String   // Ex: "Nova escola cadastrada"
-  descricao   String?  // Ex: "Escola ETEPAM inserida no sistema."
-  entidade    String?  // Ex: "Escola", "Usuario", "Chamado"
+  tipo        String   
+  titulo      String   
+  descricao   String?  
+  entidade    String?  
   responsavel String   @default("Sistema")
   criadoEm    DateTime @default(now())
 
