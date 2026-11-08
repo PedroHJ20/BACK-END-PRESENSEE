@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../lib/prisma.js';
+import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 
+const prisma = new PrismaClient();
 const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
 
 async function getLoggedUser(req: Request) {
@@ -31,7 +32,7 @@ async function getLoggedUser(req: Request) {
 }
 
 export const StudentController = {
-  // 1. Cadastrar um novo aluno (COM TRATAMENTO DE ERROS ROBUSTO)
+  // 1. Cadastrar um novo aluno (COM TRATAMENTO DE ERROS E MULTI-TENANT)
   async create(req: Request, res: Response) {
     try {
       const { registration, name, email, birthDate } = req.body;
@@ -40,7 +41,7 @@ export const StudentController = {
       const classId = req.body.classId || req.body.turmaId || req.body.turma;
 
       if (!classId) {
-        return res.status(400).json({ error: "A turma não foi identificada na requisição." });
+        return res.status(400).json({ error: "A turma não foi selecionada." });
       }
 
       const user = await getLoggedUser(req);
@@ -49,16 +50,15 @@ export const StudentController = {
       if (user && user.role !== 'ADMIN') {
         escolaId = user.escolaId;
         if (!escolaId) {
-          return res.status(400).json({ error: "O gestor atual não tem uma escola vinculada." });
+          return res.status(403).json({ error: "O gestor atual não tem uma escola vinculada." });
         }
       }
 
-      // Se o email vier vazio (já que no front é opcional), gera um email fictício único
+      // Se o email vier vazio, gera um email fictício para o DB
       const finalEmail = (email && email.trim() !== "") 
         ? email 
         : `${registration}@aluno.presensee.com`;
 
-      // Previne falhas caso a data venha num formato inválido
       let parsedDate = null;
       if (birthDate) {
         const dateObj = new Date(birthDate);
@@ -72,7 +72,7 @@ export const StudentController = {
           email: finalEmail,
           birthDate: parsedDate,
           classId: String(classId),
-          escolaId
+          escolaId // Vincula o aluno à escola do gestor
         }
       });
       
@@ -80,13 +80,14 @@ export const StudentController = {
     } catch (error: any) {
       console.error("Erro detalhado ao criar aluno:", error);
       
-      // Interceta o erro de campo único do Prisma (ex: Matrícula ou Email já existentes)
+      // Erro de campo único (ex: Matrícula ou Email já existem)
       if (error.code === 'P2002') {
-         const campo = error.meta?.target || "desconhecido";
-         return res.status(400).json({ error: `Já existe um registro com este dado: ${campo}` });
+         const campo = error.meta?.target?.[0] || error.meta?.target || "desconhecido";
+         const nomeCampo = campo === 'registration' ? 'matrícula' : campo === 'email' ? 'e-mail' : campo;
+         return res.status(400).json({ error: `Já existe um aluno registado com este(a) ${nomeCampo}.` });
       }
       
-      // Interceta o erro de Turma ou Escola inexistente (Chave Estrangeira)
+      // Erro de Chave Estrangeira (Turma inexistente)
       if (error.code === 'P2003') {
          return res.status(400).json({ error: "A turma selecionada não existe no banco de dados." });
       }
@@ -95,7 +96,7 @@ export const StudentController = {
     }
   },
 
-  // 2. Listar todos os alunos com cálculo de Frequência e Risco (Filtrado por Escola)
+  // 2. Listar todos os alunos (Filtrado por Escola)
   async index(req: Request, res: Response) {
     try {
       const user = await getLoggedUser(req);
@@ -148,11 +149,13 @@ export const StudentController = {
     }
   },
 
-  // 3. Buscar o perfil completo de um único aluno
+  // 3. Buscar perfil completo de um aluno (Garantindo que é da escola do gestor)
   async show(req: Request, res: Response) {
     const id = req.params.id as string;
     
     try {
+      const user = await getLoggedUser(req);
+
       const student = await prisma.student.findUnique({
         where: { id },
         include: {
@@ -167,6 +170,10 @@ export const StudentController = {
       if (!student) {
         return res.status(404).json({ error: "Aluno não encontrado" });
       }
+
+      if (user && user.role !== 'ADMIN' && student.escolaId !== user.escolaId) {
+        return res.status(403).json({ error: "Acesso negado. Este aluno não pertence à sua escola." });
+      }
       
       return res.json(student);
     } catch (error) {
@@ -175,10 +182,18 @@ export const StudentController = {
     }
   },
 
-  // 4. Cadastrar/Atualizar a foto biométrica do aluno
+  // 4. Cadastrar/Atualizar foto biométrica (Garantindo escola)
   async uploadBiometry(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
+      const user = await getLoggedUser(req);
+
+      if (user && user.role !== 'ADMIN') {
+        const student = await prisma.student.findUnique({ where: { id } });
+        if (!student || student.escolaId !== user.escolaId) {
+          return res.status(403).json({ error: "Sem permissão para alterar a biometria deste aluno." });
+        }
+      }
 
       if (!req.file) {
         return res.status(400).json({ error: "Nenhuma imagem foi enviada." });
@@ -196,12 +211,12 @@ export const StudentController = {
         student 
       });
     } catch (error) {
-      console.error("Erro detalhado no uploadBiometry:", JSON.stringify(error, null, 2));
+      console.error("Erro detalhado no uploadBiometry:", error);
       return res.status(500).json({ error: "Erro ao atualizar biometria." });
     }
   },
 
-  // 5. Histórico detalhado para o Modal de Calendário
+  // 5. Histórico detalhado para o Modal
   async attendanceHistory(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
