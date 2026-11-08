@@ -49,15 +49,14 @@ export class UserController {
   static async update(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const { name, email, telefone, avatar } = req.body; 
+      const { name, email, telefone } = req.body; 
       
       const user = await prisma.user.update({
         where: { id },
         data: {
           name,
           email,
-          telefone,
-          avatar
+          telefone
         }
       });
       
@@ -66,6 +65,34 @@ export class UserController {
     } catch (error) {
       console.error("Erro ao atualizar usuário:", error);
       return res.status(500).json({ error: "Erro ao atualizar usuário." });
+    }
+  }
+
+  // Novo método para upload da foto de perfil
+  static async uploadAvatar(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+
+      if (!req.file) {
+        return res.status(400).json({ error: "Nenhuma imagem foi enviada." });
+      }
+
+      const imageUrl = req.file.path; // URL do Cloudinary
+
+      const user = await prisma.user.update({
+        where: { id },
+        data: { avatar: imageUrl },
+      });
+
+      const { password: _, ...userSemSenha } = user;
+
+      return res.json({ 
+        message: "Avatar atualizado com sucesso na nuvem!",
+        user: userSemSenha 
+      });
+    } catch (error) {
+      console.error("Erro no upload do avatar:", error);
+      return res.status(500).json({ error: "Erro ao atualizar foto de perfil." });
     }
   }
 }

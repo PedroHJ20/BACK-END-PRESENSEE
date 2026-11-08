@@ -42,6 +42,7 @@ routes.delete('/api/escolas/:id', SchoolController.delete);
 routes.post('/api/users', UserController.create);
 routes.get('/api/users', UserController.index);
 routes.patch('/api/users/:id', UserController.update); // <-- Rota de atualização do perfil
+routes.patch('/api/users/:id/avatar', upload.single('photo'), UserController.uploadAvatar); // <-- NOVA ROTA PARA A FOTO!
 
 // Chamados de Suporte (Admin)
 routes.get('/api/chamados', ChamadoController.index);
