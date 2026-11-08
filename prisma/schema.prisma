@@ -49,9 +49,9 @@ model Class {
   escolaId   String?
   escola     Escola?      @relation(fields: [escolaId], references: [id])
 
-  students   Student[]
+  students    Student[]
   attendances Attendance[]
-  createdAt  DateTime     @default(now())
+  createdAt   DateTime     @default(now())
 
   @@map("turmas")
 }
@@ -140,7 +140,7 @@ model Grade {
 }
 
 // ==========================================
-// OCORRÊNCIAS (Para o painel do Monitor)
+// OCORRÊNCIAS (Para o painel do Monitor e Diário)
 // ==========================================
 model Incident {
   id          String   @id @default(uuid())
@@ -148,12 +148,19 @@ model Incident {
   description String   // Detalhe do que aconteceu
   date        DateTime @default(now())
   
-  studentId   String?  // <-- AGORA OPCIONAL (Permite notas no Diário sem aluno)
-  student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade) // <-- AGORA OPCIONAL
+  studentId   String?  // OPCIONAL (Permite notas no Diário sem aluno)
+  student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  // MULTI-TENANT: Relacionamento com a escola (necessário para ocorrências sem aluno)
+  escolaId    String?
+  escola      Escola?  @relation(fields: [escolaId], references: [id])
 
   @@map("ocorrencias")
 }
 
+// ==========================================
+// CALENDÁRIO & EVENTOS ESCOLARES
+// ==========================================
 model Event {
   id              String   @id @default(uuid())
   title           String   
@@ -162,12 +169,20 @@ model Event {
   type            String   
   excusesAbsence  Boolean  @default(false) 
   audience        String   
+  
+  // MULTI-TENANT: Relacionamento com a Escola
+  escolaId        String?
+  escola          Escola?  @relation(fields: [escolaId], references: [id])
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@map("eventos")
 }
 
+// ==========================================
+// ESCOLAS (Tenant Principal)
+// ==========================================
 model Escola {
   id          String   @id @default(uuid())
   nome        String
@@ -184,9 +199,12 @@ model Escola {
   uf          String?
   telefone    String?
   
+  // Relacionamentos inversos Multi-Tenant
   users       User[]
   classes     Class[]
   students    Student[]
+  events      Event[]     // Relacionamento inverso para Event
+  incidents   Incident[]  // Relacionamento inverso para Incident
   
   createdAt   DateTime @default(now())
 
@@ -197,21 +215,21 @@ model Escola {
 // CHAMADOS (Central de Suporte)
 // ==========================================
 model Chamado {
-  id           String   @id @default(uuid())
-  titulo       String
-  descricao    String
-  escola       String?
-  solicitante  String
-  categoria    String
-  responsavel  String?
-  prioridade   String   @default("Normal")
-  status       String   @default("Aberto")
-  avaliacao    Int?
+  id          String   @id @default(uuid())
+  titulo      String
+  descricao   String
+  escola      String?
+  solicitante String
+  categoria   String
+  responsavel String?
+  prioridade  String   @default("Normal")
+  status      String   @default("Aberto")
+  avaliacao   Int?
 
   // Armazenando arrays complexos (mensagens, histórico, anexos) como JSON no PostgreSQL
-  mensagens    Json     @default("[]")
-  historico    Json     @default("[]")
-  notificacoes Json     @default("[]")
+  mensagens    Json      @default("[]")
+  historico    Json      @default("[]")
+  notificacoes Json      @default("[]")
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
