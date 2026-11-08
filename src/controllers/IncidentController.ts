@@ -80,7 +80,7 @@ export class IncidentController {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Gestor sem escola vinculada não pode criar ocorrências." });
         }
-        escolaId = user.escolaId; // <-- Garante a escola do gestor logado
+        escolaId = user.escolaId; // Garante a escola do gestor logado
         
         if (studentId) {
           const student = await prisma.student.findUnique({ where: { id: studentId } });
@@ -103,7 +103,7 @@ export class IncidentController {
       const payloadData: any = {
         type: finalType,
         description: descFinal.trim() || 'Sem descrição',
-        escolaId // <-- Salva a ocorrência diretamente na escola do gestor!
+        escolaId
       };
 
       if (studentId) payloadData.studentId = studentId;
@@ -127,24 +127,43 @@ export class IncidentController {
 
   static async update(req: Request, res: Response) {
     const id = req.params.id as string;
-    const { resolved, description, texto, feita } = req.body;
+    const { resolved, description, texto, feita, priority, prioridade } = req.body;
     
     try {
       const user = await getLoggedUser(req);
 
+      const incidentExistente = await prisma.incident.findUnique({ where: { id } });
+      if (!incidentExistente) {
+         return res.status(404).json({ error: "Ocorrência não encontrada." });
+      }
+
       // Trava de segurança para Edição
       if (user && user.role !== 'ADMIN') {
-        const incidentExistente = await prisma.incident.findUnique({ where: { id } });
-        
-        if (!incidentExistente || incidentExistente.escolaId !== user.escolaId) {
+        if (incidentExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para editar esta ocorrência." });
         }
       }
 
       const updateData: any = {};
       
-      const desc = description !== undefined ? description : texto;
-      if (desc !== undefined) updateData.description = desc;
+      let descAtual = description !== undefined ? description : texto;
+      
+      // MÁGICA DA PRIORIDADE: Atualiza a tag [Prioridade: X] no texto da descrição
+      const novaPrioridade = priority || prioridade;
+      if (novaPrioridade) {
+         let stringBase = descAtual !== undefined ? descAtual : incidentExistente.description;
+         
+         if (/\[Prioridade:.*?\]/.test(stringBase)) {
+             stringBase = stringBase.replace(/\[Prioridade:.*?\]/, `[Prioridade: ${novaPrioridade}]`);
+         } else {
+             stringBase = `[Prioridade: ${novaPrioridade}] ${stringBase}`;
+         }
+         descAtual = stringBase;
+      }
+
+      if (descAtual !== undefined) {
+          updateData.description = descAtual;
+      }
       
       const estadoResolvido = resolved !== undefined ? resolved : feita;
       if (estadoResolvido === true) updateData.type = 'RESOLVIDO';
