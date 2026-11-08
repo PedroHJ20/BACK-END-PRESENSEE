@@ -97,14 +97,14 @@ export class EventController {
       const event = await prisma.event.create({
         data: {
           title: title || 'Sem título',
-          description: description || null, // Salvando a descrição
-          color: color || null,             // Salvando a cor
+          description: description || null,
+          color: color || null,
           startDate,
           endDate,
           type: type || 'Outro',
           excusesAbsence,
           audience: audience || 'Toda a escola',
-          escolaId
+          escolaId // <-- Agora o evento ficará vinculado à escola do Josuke!
         }
       });
       return res.status(201).json(event);
@@ -131,8 +131,8 @@ export class EventController {
 
       const updateData: any = {};
       if (title) updateData.title = title;
-      if (description !== undefined) updateData.description = description; // Atualiza a descrição
-      if (color !== undefined) updateData.color = color;                   // Atualiza a cor
+      if (description !== undefined) updateData.description = description; 
+      if (color !== undefined) updateData.color = color;                   
       if (type) updateData.type = type;
       if (audience) updateData.audience = audience;
       if (allowance !== undefined) updateData.excusesAbsence = allowance !== 'nenhum';
