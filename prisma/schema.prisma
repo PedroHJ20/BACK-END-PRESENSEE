@@ -18,20 +18,22 @@ enum Role {
 
 // Usuários (Gestores, Professores, Monitores)
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(TEACHER)
+  id             String   @id @default(uuid())
+  name           String
+  email          String   @unique
+  password       String
+  role           Role     @default(TEACHER)
   
-  telefone  String?
-  avatar    String? // Imagem base64
+  telefone       String?
+  avatar         String? // Imagem base64
   
-  escolaId  String?
-  escola    Escola?  @relation(fields: [escolaId], references: [id])
+  primeiroAcesso Boolean  @default(true) // <-- NOVA COLUNA PARA TRAVA DE LOGIN
   
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  escolaId       String?
+  escola         Escola?  @relation(fields: [escolaId], references: [id], onDelete: Cascade) // <-- EXCLUSÃO EM CASCATA AQUI
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("usuarios")
 }
@@ -151,21 +153,21 @@ model Incident {
 
 // Calendário & Eventos Escolares
 model Event {
-  id              String   @id @default(uuid())
-  title           String   
-  description     String?  // <-- Adicionado
-  color           String?  // <-- Adicionado
-  startDate       DateTime 
-  endDate         DateTime 
-  type            String   
-  excusesAbsence  Boolean  @default(false) 
-  audience        String   
+  id             String   @id @default(uuid())
+  title          String   
+  description    String?  
+  color          String?  
+  startDate      DateTime 
+  endDate        DateTime 
+  type           String   
+  excusesAbsence Boolean  @default(false) 
+  audience       String   
   
-  escolaId        String?
-  escola          Escola?  @relation(fields: [escolaId], references: [id])
+  escolaId       String?
+  escola         Escola?  @relation(fields: [escolaId], references: [id])
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("eventos")
 }

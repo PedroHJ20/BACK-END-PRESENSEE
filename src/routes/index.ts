@@ -23,6 +23,7 @@ routes.get('/api/status', (req, res) => {
 });
 routes.post('/api/login', AuthController.login);
 routes.post('/api/setup', AuthController.setup); 
+routes.post('/api/change-initial-password', AuthController.changeInitialPassword); // <-- Rota para troca de senha no primeiro acesso
 
 // Middleware de Autenticação (Requer Token JWT)
 routes.use(authMiddleware);
