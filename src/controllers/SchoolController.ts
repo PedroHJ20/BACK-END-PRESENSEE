@@ -6,11 +6,11 @@ import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
-// Configuração do disparador de e-mails (Atualizada para deploy na nuvem)
+// Configuração do disparador de e-mails (Atualizada para porta 587 - STARTTLS)
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 465,
-  secure: true, // true para porta 465
+  port: 587,
+  secure: false, // ATENÇÃO: Deve ser false para a porta 587
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
@@ -146,7 +146,6 @@ export class SchoolController {
   static async delete(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      // Como o Prisma Schema tem onDelete: Cascade, o gestor será excluído automaticamente
       await prisma.escola.delete({ 
         where: { id } 
       });
