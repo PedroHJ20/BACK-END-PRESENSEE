@@ -23,7 +23,7 @@ routes.get('/api/status', (req, res) => {
 });
 routes.post('/api/login', AuthController.login);
 routes.post('/api/setup', AuthController.setup); 
-routes.post('/api/change-initial-password', AuthController.changeInitialPassword); // <-- Rota para troca de senha no primeiro acesso
+routes.post('/api/change-initial-password', AuthController.changeInitialPassword);
 
 // Middleware de Autenticação (Requer Token JWT)
 routes.use(authMiddleware);
@@ -39,18 +39,19 @@ routes.get('/api/escolas', SchoolController.index);
 routes.patch('/api/escolas/:id/status', SchoolController.updateStatus);
 routes.delete('/api/escolas/:id', SchoolController.delete);
 
-// Usuários / Gestores (Admin)
+// Usuários / Gestores
 routes.post('/api/users', UserController.create);
 routes.get('/api/users', UserController.index);
-routes.patch('/api/users/:id', UserController.update); // <-- Rota de atualização do perfil
-routes.patch('/api/users/:id/avatar', upload.single('photo'), UserController.uploadAvatar); // <-- NOVA ROTA PARA A FOTO!
+routes.patch('/api/users/:id', UserController.update);
+routes.patch('/api/users/:id/avatar', upload.single('photo'), UserController.uploadAvatar);
+routes.delete('/api/users/:id', UserController.delete);
 
-// Chamados de Suporte (Admin)
+// Chamados de Suporte
 routes.get('/api/chamados', ChamadoController.index);
 routes.post('/api/chamados', ChamadoController.create);
 routes.patch('/api/chamados/:id', ChamadoController.update);
 
-// Comunicados (Admin)
+// Comunicados
 routes.get('/api/comunicados', ComunicadoController.index);
 routes.post('/api/comunicados', ComunicadoController.create);
 routes.patch('/api/comunicados/:id', ComunicadoController.update);
@@ -61,6 +62,7 @@ routes.get('/api/health', HealthController.check);
 
 // Auditoria (Admin)
 routes.get('/api/auditoria', AuditoriaController.index);
+routes.post('/api/auditoria', AuditoriaController.create);
 
 // Turmas
 routes.post('/api/classes', ClassController.create);
