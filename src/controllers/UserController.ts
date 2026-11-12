@@ -1,13 +1,27 @@
 import type { Request, Response } from "express";
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js'; // <-- Reutiliza a instância central do Prisma!
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
 
 export class UserController {
   static async create(req: Request, res: Response) {
     try {
-      const { name, email, password, role, escolaId } = req.body;
+      const authUser = req.user;
+      
+      if (!authUser) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      const { name, email, password, role } = req.body;
+      let escolaId = req.body.escolaId;
+
+      // Trava Multi-Tenant para Criação
+      if (authUser.role !== 'ADMIN') {
+        if (!authUser.escolaId) {
+          return res.status(403).json({ error: "Gestor sem escola vinculada não pode criar usuários." });
+        }
+        escolaId = authUser.escolaId; // Garante que o usuário criado pertença à mesma escola
+      }
+
       const hashedPassword = await bcrypt.hash(password, 10);
       
       const user = await prisma.user.create({
@@ -30,7 +44,24 @@ export class UserController {
 
   static async index(req: Request, res: Response) {
     try {
+      const authUser = req.user;
+      
+      if (!authUser) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      let whereClause: any = {};
+
+      // Filtro Multi-Tenant: Só lista usuários da própria escola
+      if (authUser.role !== 'ADMIN') {
+        if (!authUser.escolaId) {
+          return res.json([]); 
+        }
+        whereClause = { escolaId: authUser.escolaId };
+      }
+
       const users = await prisma.user.findMany({
+        where: whereClause,
         include: { escola: true }
       });
       
@@ -49,6 +80,20 @@ export class UserController {
   static async update(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
+      const authUser = req.user;
+      
+      if (!authUser) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      // Trava de Edição: Permite se for o próprio usuário editando seu perfil, ou se forem da mesma escola
+      if (authUser.role !== 'ADMIN' && authUser.id !== id) {
+        const targetUser = await prisma.user.findUnique({ where: { id } });
+        if (!targetUser || targetUser.escolaId !== authUser.escolaId) {
+          return res.status(403).json({ error: "Sem permissão para editar o perfil deste usuário." });
+        }
+      }
+
       const { name, email, telefone } = req.body; 
       
       const user = await prisma.user.update({
@@ -72,6 +117,19 @@ export class UserController {
   static async uploadAvatar(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
+      const authUser = req.user;
+      
+      if (!authUser) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      // Trava de Edição da Foto
+      if (authUser.role !== 'ADMIN' && authUser.id !== id) {
+        const targetUser = await prisma.user.findUnique({ where: { id } });
+        if (!targetUser || targetUser.escolaId !== authUser.escolaId) {
+          return res.status(403).json({ error: "Sem permissão para alterar a foto deste usuário." });
+        }
+      }
 
       if (!req.file) {
         return res.status(400).json({ error: "Nenhuma imagem foi enviada." });

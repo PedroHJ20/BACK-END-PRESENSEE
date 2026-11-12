@@ -1,47 +1,21 @@
 import type { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
-const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
-
-// Função auxiliar de autenticação
-async function getLoggedUser(req: Request) {
-  let userId = null;
-  const authHeader = req.headers.authorization;
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        userId = decoded.id;
-      } catch (e) {
-        // Ignora erro
-      }
-    }
-  }
-
-  if (!userId) {
-    userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
-  }
-
-  if (userId) {
-    return await prisma.user.findUnique({ where: { id: userId } });
-  }
-  return null;
-}
+import { prisma } from '../lib/prisma.js';
 
 export class IncidentController {
   static async index(req: Request, res: Response) {
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       const studentId = req.query.studentId as string | undefined;
       
       let baseFilter: any = {};
 
       // Filtro Multi-Tenant direto na ocorrência
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.json([]); 
         }
@@ -72,11 +46,16 @@ export class IncidentController {
     const { type, description, texto, studentId, date, title, priority, category, isPending } = req.body;
 
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       let escolaId = req.body.escolaId;
 
       // Trava de segurança para Criação
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Gestor sem escola vinculada não pode criar ocorrências." });
         }
@@ -130,7 +109,11 @@ export class IncidentController {
     const { resolved, description, texto, feita, priority, prioridade } = req.body;
     
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
       const incidentExistente = await prisma.incident.findUnique({ where: { id } });
       if (!incidentExistente) {
@@ -138,7 +121,7 @@ export class IncidentController {
       }
 
       // Trava de segurança para Edição
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         if (incidentExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para editar esta ocorrência." });
         }
@@ -184,10 +167,14 @@ export class IncidentController {
     const id = req.params.id as string;
     
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
       // Trava de segurança para Exclusão
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         const incidentExistente = await prisma.incident.findUnique({ where: { id } });
         
         if (!incidentExistente || incidentExistente.escolaId !== user.escolaId) {

@@ -1,60 +1,33 @@
 import type { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
-const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
-
-async function getLoggedUser(req: Request) {
-  let userId = null;
-  const authHeader = req.headers.authorization;
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        userId = decoded.id;
-      } catch (e) {
-        // Falha silenciosa no helper
-      }
-    }
-  }
-
-  if (!userId) {
-    userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
-  }
-
-  if (userId) {
-    return await prisma.user.findUnique({ where: { id: userId } });
-  }
-  return null;
-}
+import { prisma } from '../lib/prisma.js';
 
 export const StudentController = {
-  // 1. Cadastrar um novo aluno (COM TRATAMENTO DE ERROS E MULTI-TENANT)
+  // 1. Cadastrar um novo aluno (MULTI-TENANT OTMIZADO)
   async create(req: Request, res: Response) {
     try {
       const { registration, name, email, birthDate } = req.body;
-      
-      // Mapeamento flexível para aceitar como o frontend envia a turma
       const classId = req.body.classId || req.body.turmaId || req.body.turma;
 
       if (!classId) {
         return res.status(400).json({ error: "A turma não foi selecionada." });
       }
 
-      const user = await getLoggedUser(req);
+      // 1. Pega os dados direto do middleware (sem ir ao banco)
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       let escolaId = req.body.escolaId;
 
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         escolaId = user.escolaId;
         if (!escolaId) {
           return res.status(403).json({ error: "O gestor atual não tem uma escola vinculada." });
         }
       }
 
-      // Se o email vier vazio, gera um email fictício para o DB
       const finalEmail = (email && email.trim() !== "") 
         ? email 
         : `${registration}@aluno.presensee.com`;
@@ -72,7 +45,7 @@ export const StudentController = {
           email: finalEmail,
           birthDate: parsedDate,
           classId: String(classId),
-          escolaId // Vincula o aluno à escola do gestor
+          escolaId // Vinculado perfeitamente!
         }
       });
       
@@ -80,14 +53,12 @@ export const StudentController = {
     } catch (error: any) {
       console.error("Erro detalhado ao criar aluno:", error);
       
-      // Erro de campo único (ex: Matrícula ou Email já existem)
       if (error.code === 'P2002') {
          const campo = error.meta?.target?.[0] || error.meta?.target || "desconhecido";
          const nomeCampo = campo === 'registration' ? 'matrícula' : campo === 'email' ? 'e-mail' : campo;
-         return res.status(400).json({ error: `Já existe um aluno registado com este(a) ${nomeCampo}.` });
+         return res.status(400).json({ error: `Já existe um aluno registrado com este(a) ${nomeCampo}.` });
       }
       
-      // Erro de Chave Estrangeira (Turma inexistente)
       if (error.code === 'P2003') {
          return res.status(400).json({ error: "A turma selecionada não existe no banco de dados." });
       }
@@ -96,13 +67,18 @@ export const StudentController = {
     }
   },
 
-  // 2. Listar todos os alunos (Filtrado por Escola)
+  // 2. Listar todos os alunos (Filtrado por Escola via req.user)
   async index(req: Request, res: Response) {
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       let filtroEscola = {};
 
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.json([]); 
         }
@@ -135,26 +111,26 @@ export const StudentController = {
 
         const { attendances, ...studentData } = student;
 
-        return {
-          ...studentData,
-          frequency,
-          risk
-        };
+        return { ...studentData, frequency, risk };
       });
 
-      res.json(studentsWithDashboardData);
+      return res.json(studentsWithDashboardData);
     } catch (error) {
       console.error("Erro ao listar alunos:", error);
-      res.status(500).json({ error: "Erro ao buscar os alunos." });
+      return res.status(500).json({ error: "Erro ao buscar os alunos." });
     }
   },
 
-  // 3. Buscar perfil completo de um aluno (Garantindo que é da escola do gestor)
+  // 3. Buscar perfil completo de um aluno (Checagem de permissão via req.user)
   async show(req: Request, res: Response) {
     const id = req.params.id as string;
     
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
       const student = await prisma.student.findUnique({
         where: { id },
@@ -171,7 +147,8 @@ export const StudentController = {
         return res.status(404).json({ error: "Aluno não encontrado" });
       }
 
-      if (user && user.role !== 'ADMIN' && student.escolaId !== user.escolaId) {
+      // Bloqueia gestor tentando ver aluno de outra escola
+      if (user.role !== 'ADMIN' && student.escolaId !== user.escolaId) {
         return res.status(403).json({ error: "Acesso negado. Este aluno não pertence à sua escola." });
       }
       
@@ -182,13 +159,17 @@ export const StudentController = {
     }
   },
 
-  // 4. Cadastrar/Atualizar foto biométrica (Garantindo escola)
+  // 4. Cadastrar/Atualizar foto biométrica 
   async uploadBiometry(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const user = await getLoggedUser(req);
+      const user = req.user;
 
-      if (user && user.role !== 'ADMIN') {
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      if (user.role !== 'ADMIN') {
         const student = await prisma.student.findUnique({ where: { id } });
         if (!student || student.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para alterar a biometria deste aluno." });
@@ -222,17 +203,26 @@ export const StudentController = {
       const id = req.params.id as string;
       const month = req.query.month as string | undefined;
       const year = req.query.year as string | undefined;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      // Adicionamos a trava de segurança para o histórico:
+      if (user.role !== 'ADMIN') {
+         const studentCheck = await prisma.student.findUnique({ select: { escolaId: true }, where: { id }});
+         if (!studentCheck || studentCheck.escolaId !== user.escolaId) {
+            return res.status(403).json({ error: "Acesso negado. Aluno não pertence à sua escola." });
+         }
+      }
 
       let dateFilter = {};
       
       if (month && year) {
         const startDate = new Date(Number(year), Number(month) - 1, 1);
         const endDate = new Date(Number(year), Number(month), 1);
-        
-        dateFilter = {
-          gte: startDate,
-          lt: endDate
-        };
+        dateFilter = { gte: startDate, lt: endDate };
       }
 
       const history = await prisma.attendance.findMany({
@@ -240,15 +230,13 @@ export const StudentController = {
           studentId: id,
           ...(Object.keys(dateFilter).length > 0 && { date: dateFilter })
         },
-        orderBy: {
-          date: 'asc'
-        }
+        orderBy: { date: 'asc' }
       });
 
-      res.json(history);
+      return res.json(history);
     } catch (error) {
       console.error("Erro ao buscar histórico:", error);
-      res.status(500).json({ error: "Erro ao buscar o histórico de presença." });
+      return res.status(500).json({ error: "Erro ao buscar o histórico de presença." });
     }
   }
 };

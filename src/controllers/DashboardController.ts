@@ -1,53 +1,31 @@
 import type { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export class DashboardController {
   static async getSummary(req: Request, res: Response) {
     try {
-      let userId = null;
-      
-      const authHeader = req.headers.authorization;
-      // Garante que o cabeçalho existe e tem o formato correto "Bearer <token>"
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.split(' ')[1];
-        
-        // Só tenta decodificar se o token realmente existir
-        if (token) {
-          try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-            userId = decoded.id;
-          } catch (e) {
-            console.error("Dashboard: Erro ao decodificar token", e);
-          }
-        }
-      }
+      // 1. Pega os dados diretamente do middleware (sem ir ao banco nem decodificar tokens)
+      const user = req.user;
 
-      // Fallback caso o middleware injete a variável de outra forma
-      if (!userId) {
-        userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
       let filtroEscola = {}; 
 
-      if (userId) {
-        const usuarioLogado = await prisma.user.findUnique({ where: { id: userId } });
-        
-        if (usuarioLogado && usuarioLogado.role !== 'ADMIN') {
-          if (!usuarioLogado.escolaId) {
-            return res.json({
-              totalAlunos: 0, alunosAltoRisco: 0, alunosRisco: 0, alunosBaixoRisco: 0,
-              taxaFrequenciaGeral: 100, turmas: [], evolucaoRisco: [], frequenciaPorSemana: []
-            });
-          }
-          filtroEscola = { escolaId: usuarioLogado.escolaId };
+      // 2. Trava Multi-Tenant: Filtra pela escola do gestor logado
+      if (user.role !== 'ADMIN') {
+        if (!user.escolaId) {
+          // Se o gestor não tiver escola vinculada, o dashboard fica zerado
+          return res.json({
+            totalAlunos: 0, alunosAltoRisco: 0, alunosRisco: 0, alunosBaixoRisco: 0,
+            taxaFrequenciaGeral: 100, turmas: [], evolucaoRisco: [], frequenciaPorSemana: []
+          });
         }
-      } else {
-        console.warn("Dashboard: Requisição processada sem identificação de utilizador.");
+        filtroEscola = { escolaId: user.escolaId };
       }
 
+      // 3. Aplica o filtro de escola na busca de Alunos e Turmas
       const students = await prisma.student.findMany({
         where: filtroEscola,
         include: {

@@ -1,46 +1,21 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
-
-// Função auxiliar de autenticação
-async function getLoggedUser(req: Request) {
-  let userId = null;
-  const authHeader = req.headers.authorization;
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        userId = decoded.id;
-      } catch (e) {
-        // Ignora erro
-      }
-    }
-  }
-
-  if (!userId) {
-    userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
-  }
-
-  if (userId) {
-    return await prisma.user.findUnique({ where: { id: userId } });
-  }
-  return null;
-}
 
 export const AttendanceController = {
   // 1. Registrar chamada automaticamente (via câmera)
   async create(req: Request, res: Response) {
     try {
       const { studentId, classId } = req.body;
-      const user = await getLoggedUser(req);
+      
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
       // Trava de segurança Multi-Tenant:
       // Verifica se o aluno que está recebendo a presença pertence à escola do gestor logado
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         const student = await prisma.student.findUnique({ where: { id: studentId } });
         
         if (!student || student.escolaId !== user.escolaId) {
@@ -70,10 +45,15 @@ export const AttendanceController = {
   // 2. Listar todos os alertas de evasão para a coordenação
   async listAlerts(req: Request, res: Response) {
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       let filtroEscola = {};
 
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.json([]); // Retorna array vazio se o gestor não tiver escola
         }

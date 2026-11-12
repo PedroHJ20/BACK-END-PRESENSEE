@@ -1,46 +1,25 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
-
-// Função auxiliar para descobrir quem está fazendo a requisição
-async function getLoggedUser(req: Request) {
-  let userId = null;
-  const authHeader = req.headers.authorization;
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        userId = decoded.id;
-      } catch (e) {
-        // Ignora erro de decodificação no helper
-      }
-    }
-  }
-
-  if (!userId) {
-    userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
-  }
-
-  if (userId) {
-    return await prisma.user.findUnique({ where: { id: userId } });
-  }
-  return null;
-}
 
 export const ClassController = {
   async create(req: Request, res: Response) {
     try {
       const { name, year, course, shift } = req.body;
       
-      const user = await getLoggedUser(req);
-      let escolaId = req.body.escolaId; 
+      // 1. Pega os dados diretamente do middleware (sem precisar consultar o banco!)
+      const user = req.user; 
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
-      // Se for gestor, a turma pertence obrigatoriamente à escola dele
-      if (user && user.role !== 'ADMIN') {
+      // 2. Define o escolaId com base no perfil (Admin pode enviar no body, Gestor pega do token)
+      let escolaId = req.body.escolaId; 
+      
+      if (user.role !== 'ADMIN') {
+        if (!user.escolaId) {
+          return res.status(403).json({ error: "Gestor sem escola vinculada." });
+        }
         escolaId = user.escolaId;
       }
 
@@ -50,32 +29,37 @@ export const ClassController = {
           year, 
           course, 
           shift,
-          escolaId // <-- Vincula a turma à escola no banco de dados
+          escolaId // Vincula a turma à escola de forma blindada
         } 
       });
       
-      res.status(201).json(newClass);
+      return res.status(201).json(newClass);
     } catch (error) {
       console.error("Erro ao criar turma:", error);
-      res.status(500).json({ error: "Erro ao criar turma." });
+      return res.status(500).json({ error: "Erro ao criar turma." });
     }
   },
 
   async index(req: Request, res: Response) {
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       let filtroEscola = {};
 
-      // Regra Multi-Tenant (Isolamento por Escola)
-      if (user && user.role !== 'ADMIN') {
+      // 3. Regra Multi-Tenant: O Prisma filtra automaticamente pela escola do gestor logado
+      if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
-          return res.json([]); // Se o gestor não tem escola, retorna array vazio
+          return res.json([]); 
         }
         filtroEscola = { escolaId: user.escolaId };
       }
 
       const classes = await prisma.class.findMany({
-        where: filtroEscola, // <-- Aplica o filtro na busca
+        where: filtroEscola, 
         include: {
           _count: {
             select: { students: true }
@@ -89,7 +73,7 @@ export const ClassController = {
         }
       });
 
-      // Mapeia os dados calculando os riscos internos da turma
+      // 4. Mapeamento de cálculos mantido intacto (excelente lógica, parabéns!)
       const formattedClasses = classes.map(c => {
         let highRisk = 0;
         let mediumRisk = 0;
@@ -127,10 +111,10 @@ export const ClassController = {
         };
       });
 
-      res.json(formattedClasses);
+      return res.json(formattedClasses);
     } catch (error) {
       console.error("Erro ao buscar turmas:", error);
-      res.status(500).json({ error: "Erro ao buscar as turmas." });
+      return res.status(500).json({ error: "Erro ao buscar as turmas." });
     }
   }
 };

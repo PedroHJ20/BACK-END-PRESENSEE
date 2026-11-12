@@ -1,45 +1,19 @@
 import type { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
-const JWT_SECRET = (process.env.JWT_SECRET as string) || "fallback_secret";
-
-// Função auxiliar de autenticação
-async function getLoggedUser(req: Request) {
-  let userId = null;
-  const authHeader = req.headers.authorization;
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        userId = decoded.id;
-      } catch (e) {
-        // Ignora erro
-      }
-    }
-  }
-
-  if (!userId) {
-    userId = (req as any).userId || (req as any).user?.id || (req as any).usuarioId;
-  }
-
-  if (userId) {
-    return await prisma.user.findUnique({ where: { id: userId } });
-  }
-  return null;
-}
+import { prisma } from '../lib/prisma.js';
 
 export class EventController {
   static async index(req: Request, res: Response) {
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       let whereClause: any = {};
 
       // Filtro Multi-Tenant: Mostra apenas eventos da escola do gestor logado
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.json([]); 
         }
@@ -79,11 +53,16 @@ export class EventController {
     const { title, dates, type, allowance, audience, description, color } = req.body;
 
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
       let escolaId = req.body.escolaId;
 
       // Trava de criação Multi-Tenant
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Gestor sem escola vinculada não pode criar eventos." });
         }
@@ -104,7 +83,7 @@ export class EventController {
           type: type || 'Outro',
           excusesAbsence,
           audience: audience || 'Toda a escola',
-          escolaId // <-- Agora o evento ficará vinculado à escola do Josuke!
+          escolaId // <-- Evento vinculado com sucesso
         }
       });
       return res.status(201).json(event);
@@ -119,10 +98,14 @@ export class EventController {
     const { title, dates, type, allowance, audience, description, color } = req.body;
     
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
       // Trava de edição Multi-Tenant
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         const eventoExistente = await prisma.event.findUnique({ where: { id: String(id) } });
         if (!eventoExistente || eventoExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para editar este evento." });
@@ -156,10 +139,14 @@ export class EventController {
   static async delete(req: Request, res: Response) {
     const { id } = req.params;
     try {
-      const user = await getLoggedUser(req);
+      const user = req.user;
+      
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
       // Trava de exclusão Multi-Tenant
-      if (user && user.role !== 'ADMIN') {
+      if (user.role !== 'ADMIN') {
         const eventoExistente = await prisma.event.findUnique({ where: { id: String(id) } });
         if (!eventoExistente || eventoExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para excluir este evento." });

@@ -18,36 +18,36 @@ enum Role {
 
 // Usuários (Gestores, Professores, Monitores)
 model User {
-  id             String   @id @default(uuid())
-  name           String
-  email          String   @unique
-  password       String
-  role           Role     @default(TEACHER)
-  
-  telefone       String?
-  avatar         String? // Imagem base64
-  
-  primeiroAcesso Boolean  @default(true) // <-- NOVA COLUNA PARA TRAVA DE LOGIN
-  
-  escolaId       String?
-  escola         Escola?  @relation(fields: [escolaId], references: [id], onDelete: Cascade) // <-- EXCLUSÃO EM CASCATA AQUI
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id       String @id @default(uuid())
+  name     String
+  email    String @unique
+  password String
+  role     Role   @default(TEACHER)
+
+  telefone String?
+  avatar   String? // Imagem base64
+
+  primeiroAcesso Boolean @default(true)
+
+  escolaId String?
+  escola   Escola? @relation(fields: [escolaId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("usuarios")
 }
 
 // Turmas
 model Class {
-  id         String       @id @default(uuid())
-  name       String       // Ex: "1º Ano A"
-  year       Int          // Ex: 2026
-  course     String       // Ex: "Ensino Médio"
-  shift      String       // Ex: "Manhã"
-  
-  escolaId   String?
-  escola     Escola?      @relation(fields: [escolaId], references: [id])
+  id     String @id @default(uuid())
+  name   String // Ex: "1º Ano A"
+  year   Int // Ex: 2026
+  course String // Ex: "Ensino Médio"
+  shift  String // Ex: "Manhã"
+
+  escolaId String?
+  escola   Escola? @relation(fields: [escolaId], references: [id])
 
   students    Student[]
   attendances Attendance[]
@@ -58,28 +58,31 @@ model Class {
 
 // Alunos
 model Student {
-  id                String       @id @default(uuid())
-  registration      String       @unique // Matrícula
+  id                String    @id @default(uuid())
+  registration      String // Sem @unique global
   name              String
-  email             String       @unique
-  birthDate         DateTime?    
-  biometricDataUrl  String?      
-  biometricEncoding String?      
-  
-  escolaId          String?
-  escola            Escola?      @relation(fields: [escolaId], references: [id])
+  email             String // Sem @unique global
+  birthDate         DateTime?
+  biometricDataUrl  String?
+  biometricEncoding String?
 
-  classId           String
-  class             Class        @relation(fields: [classId], references: [id])
-  
-  attendances       Attendance[]
-  alerts            Alert[]
-  grades            Grade[]
-  incidents         Incident[]
-  
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  escolaId String?
+  escola   Escola? @relation(fields: [escolaId], references: [id])
 
+  classId String
+  class   Class  @relation(fields: [classId], references: [id])
+
+  attendances Attendance[]
+  alerts      Alert[]
+  grades      Grade[]
+  incidents   Incident[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // MÁGICA MULTI-TENANT: Único apenas dentro da própria escola
+  @@unique([escolaId, registration])
+  @@unique([escolaId, email])
   @@map("alunos")
 }
 
@@ -100,7 +103,7 @@ model Attendance {
   classId   String
   class     Class            @relation(fields: [classId], references: [id])
 
-  @@unique([studentId, date]) 
+  @@unique([studentId, date])
   @@map("chamadas")
 }
 
@@ -112,7 +115,7 @@ enum AlertStatus {
 // Alertas de Risco de Evasão
 model Alert {
   id         String      @id @default(uuid())
-  reason     String      
+  reason     String
   status     AlertStatus @default(PENDING)
   studentId  String
   student    Student     @relation(fields: [studentId], references: [id])
@@ -124,13 +127,13 @@ model Alert {
 
 // Avaliações
 model Grade {
-  id        String   @id @default(uuid())
-  subject   String   
-  value     Float    
-  date      DateTime @default(now())
-  
+  id      String   @id @default(uuid())
+  subject String
+  value   Float
+  date    DateTime @default(now())
+
   studentId String
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@map("notas")
 }
@@ -138,15 +141,15 @@ model Grade {
 // Ocorrências (Para o painel do Monitor e Diário)
 model Incident {
   id          String   @id @default(uuid())
-  type        String   
-  description String   
+  type        String
+  description String
   date        DateTime @default(now())
-  
-  studentId   String?  
-  student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  escolaId    String?
-  escola      Escola?  @relation(fields: [escolaId], references: [id])
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  escolaId String?
+  escola   Escola? @relation(fields: [escolaId], references: [id])
 
   @@map("ocorrencias")
 }
@@ -154,32 +157,32 @@ model Incident {
 // Calendário & Eventos Escolares
 model Event {
   id             String   @id @default(uuid())
-  title          String   
-  description    String?  
-  color          String?  
-  startDate      DateTime 
-  endDate        DateTime 
-  type           String   
-  excusesAbsence Boolean  @default(false) 
-  audience       String   
-  
-  escolaId       String?
-  escola         Escola?  @relation(fields: [escolaId], references: [id])
+  title          String
+  description    String?
+  color          String?
+  startDate      DateTime
+  endDate        DateTime
+  type           String
+  excusesAbsence Boolean  @default(false)
+  audience       String
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  escolaId String?
+  escola   Escola? @relation(fields: [escolaId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("eventos")
 }
 
 // Escolas (Tenant Principal)
 model Escola {
-  id          String   @id @default(uuid())
-  nome        String
-  municipio   String
-  rede        String
-  status      String   @default("Pendente")
-  
+  id        String @id @default(uuid())
+  nome      String
+  municipio String
+  rede      String
+  status    String @default("Pendente")
+
   inep        String?
   cep         String?
   logradouro  String?
@@ -188,34 +191,39 @@ model Escola {
   bairro      String?
   uf          String?
   telefone    String?
-  
-  users       User[]
-  classes     Class[]
-  students    Student[]
-  events      Event[]     
-  incidents   Incident[]  
-  
-  createdAt   DateTime @default(now())
+
+  users     User[]
+  classes   Class[]
+  students  Student[]
+  events    Event[]
+  incidents Incident[]
+  chamados  Chamado[] // Relação com chamados adicionada
+
+  createdAt DateTime @default(now())
 
   @@map("escolas")
 }
 
 // Chamados (Central de Suporte)
 model Chamado {
-  id          String   @id @default(uuid())
-  titulo      String
-  descricao   String
-  escola      String?
+  id        String  @id @default(uuid())
+  titulo    String
+  descricao String
+  escola    String? // Nome em texto mantido para compatibilidade
+
+  escolaId  String? // Chave estrangeira para o isolamento lógico
+  escolaRel Escola? @relation(fields: [escolaId], references: [id])
+
   solicitante String
   categoria   String
   responsavel String?
-  prioridade  String   @default("Normal")
-  status      String   @default("Aberto")
+  prioridade  String  @default("Normal")
+  status      String  @default("Aberto")
   avaliacao   Int?
 
-  mensagens    Json      @default("[]")
-  historico    Json      @default("[]")
-  notificacoes Json      @default("[]")
+  mensagens    Json @default("[]")
+  historico    Json @default("[]")
+  notificacoes Json @default("[]")
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -230,7 +238,7 @@ model Comunicado {
   mensagem    String
   tipo        String    @default("Informativo")
   publico     String    @default("Todas as escolas")
-  escolas     String[]  
+  escolas     String[]
   status      String    @default("Rascunho")
   inicio      DateTime?
   fim         DateTime?
@@ -244,10 +252,10 @@ model Comunicado {
 // Auditoria (Painel Administrativo)
 model Auditoria {
   id          String   @id @default(uuid())
-  tipo        String   
-  titulo      String   
-  descricao   String?  
-  entidade    String?  
+  tipo        String
+  titulo      String
+  descricao   String?
+  entidade    String?
   responsavel String   @default("Sistema")
   criadoEm    DateTime @default(now())
 
