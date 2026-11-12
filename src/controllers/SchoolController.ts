@@ -6,9 +6,11 @@ import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
-// Configuração do disparador de e-mails
+// Configuração do disparador de e-mails (Atualizada para deploy na nuvem)
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // ou o seu serviço SMTP (Outlook, AWS SES, etc)
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // true para porta 465
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
@@ -23,7 +25,7 @@ export class SchoolController {
         nome, municipio, rede, status, 
         inep, cep, logradouro, numero, 
         complemento, bairro, uf, telefone,
-        gestorNome, gestorEmail // <-- Campos novos que o front-end deve enviar
+        gestorNome, gestorEmail
       } = req.body;
 
       if (!gestorNome || !gestorEmail) {
@@ -58,7 +60,7 @@ export class SchoolController {
             password: hashedPassword,
             role: "MANAGER",
             escolaId: escola.id,
-            primeiroAcesso: true // Força a troca de senha
+            primeiroAcesso: true // Força a troca de senha no primeiro login
           }
         });
 
@@ -144,7 +146,7 @@ export class SchoolController {
   static async delete(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      // Como o Prisma Schema tem onDelete: Cascade, o gestor será excluído automaticamente!
+      // Como o Prisma Schema tem onDelete: Cascade, o gestor será excluído automaticamente
       await prisma.escola.delete({ 
         where: { id } 
       });
