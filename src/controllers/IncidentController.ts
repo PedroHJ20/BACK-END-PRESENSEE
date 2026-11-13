@@ -5,21 +5,20 @@ export class IncidentController {
   static async index(req: Request, res: Response) {
     try {
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
       const studentId = req.query.studentId as string | undefined;
-      
+
       let baseFilter: any = {};
 
-      // Filtro Multi-Tenant direto na ocorrência
       if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
-          return res.json([]); 
+          return res.json([]);
         }
-        baseFilter.escolaId = user.escolaId; 
+        baseFilter.escolaId = user.escolaId;
       }
 
       if (studentId) {
@@ -47,20 +46,19 @@ export class IncidentController {
 
     try {
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
       let escolaId = req.body.escolaId;
 
-      // Trava de segurança para Criação
       if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Gestor sem escola vinculada não pode criar ocorrências." });
         }
-        escolaId = user.escolaId; // Garante a escola do gestor logado
-        
+        escolaId = user.escolaId;
+
         if (studentId) {
           const student = await prisma.student.findUnique({ where: { id: studentId } });
           if (!student || student.escolaId !== user.escolaId) {
@@ -71,7 +69,7 @@ export class IncidentController {
 
       let finalType = type;
       if (!finalType) {
-          finalType = isPending ? 'PENDENCIA' : 'NOTA';
+        finalType = isPending ? 'PENDENCIA' : 'NOTA';
       }
 
       let descFinal = description || texto || '';
@@ -89,7 +87,7 @@ export class IncidentController {
       if (date) payloadData.date = new Date(date);
 
       const queryOptions: any = { data: payloadData };
-      
+
       if (studentId) {
         queryOptions.include = {
           student: { include: { class: true } }
@@ -104,23 +102,83 @@ export class IncidentController {
     }
   }
 
+  static async uploadCertificate(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      const { studentId, inicio, fim, observacao } = req.body;
+      const arquivo = req.file as any;
+
+      if (!studentId) {
+        return res.status(400).json({ error: "Informe o estudante da justificativa." });
+      }
+      if (!inicio || !fim) {
+        return res.status(400).json({ error: "Informe a data de início e término do atestado." });
+      }
+      if (!arquivo || !arquivo.path) {
+        return res.status(400).json({ error: "Nenhum arquivo de atestado foi enviado." });
+      }
+
+      const student = await prisma.student.findUnique({ where: { id: String(studentId) } });
+      if (!student) {
+        return res.status(404).json({ error: "Estudante não encontrado." });
+      }
+
+      let escolaId = student.escolaId;
+      if (user.role !== 'ADMIN') {
+        if (!user.escolaId || student.escolaId !== user.escolaId) {
+          return res.status(403).json({ error: "Este aluno não pertence à sua escola." });
+        }
+        escolaId = user.escolaId;
+      }
+
+      const formatarBR = (iso: string) => iso.split('-').reverse().join('/');
+      const periodoTexto = `${formatarBR(inicio)} até ${formatarBR(fim)}`;
+      const obsTexto = observacao?.trim() ? ` | Obs: ${observacao.trim()}` : '';
+      const urlCloudinary = arquivo.path;
+
+      const incident = await prisma.incident.create({
+        data: {
+          type: 'Justificativa de Falta',
+          studentId: String(studentId),
+          escolaId,
+          date: new Date(`${inicio}T12:00:00`),
+          description: `Período: ${periodoTexto}${obsTexto} | [Atestado: ${urlCloudinary}]`
+        },
+        include: {
+          student: { include: { class: true } }
+        }
+      });
+
+      return res.status(201).json({
+        incident,
+        certificateUrl: urlCloudinary
+      });
+    } catch (error) {
+      console.error("Erro ao registrar justificativa médica:", error);
+      return res.status(500).json({ error: 'Erro ao salvar atestado médico.' });
+    }
+  }
+
   static async update(req: Request, res: Response) {
     const id = req.params.id as string;
     const { resolved, description, texto, feita, priority, prioridade } = req.body;
-    
+
     try {
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
       const incidentExistente = await prisma.incident.findUnique({ where: { id } });
       if (!incidentExistente) {
-         return res.status(404).json({ error: "Ocorrência não encontrada." });
+        return res.status(404).json({ error: "Ocorrência não encontrada." });
       }
 
-      // Trava de segurança para Edição
       if (user.role !== 'ADMIN') {
         if (incidentExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para editar esta ocorrência." });
@@ -128,26 +186,25 @@ export class IncidentController {
       }
 
       const updateData: any = {};
-      
+
       let descAtual = description !== undefined ? description : texto;
-      
-      // MÁGICA DA PRIORIDADE: Atualiza a tag [Prioridade: X] no texto da descrição
+
       const novaPrioridade = priority || prioridade;
       if (novaPrioridade) {
-         let stringBase = descAtual !== undefined ? descAtual : incidentExistente.description;
-         
-         if (/\[Prioridade:.*?\]/.test(stringBase)) {
-             stringBase = stringBase.replace(/\[Prioridade:.*?\]/, `[Prioridade: ${novaPrioridade}]`);
-         } else {
-             stringBase = `[Prioridade: ${novaPrioridade}] ${stringBase}`;
-         }
-         descAtual = stringBase;
+        let stringBase = descAtual !== undefined ? descAtual : incidentExistente.description;
+
+        if (/\[Prioridade:.*?\]/.test(stringBase)) {
+          stringBase = stringBase.replace(/\[Prioridade:.*?\]/, `[Prioridade: ${novaPrioridade}]`);
+        } else {
+          stringBase = `[Prioridade: ${novaPrioridade}] ${stringBase}`;
+        }
+        descAtual = stringBase;
       }
 
       if (descAtual !== undefined) {
-          updateData.description = descAtual;
+        updateData.description = descAtual;
       }
-      
+
       const estadoResolvido = resolved !== undefined ? resolved : feita;
       if (estadoResolvido === true) updateData.type = 'RESOLVIDO';
       if (estadoResolvido === false) updateData.type = 'PENDENCIA';
@@ -165,18 +222,17 @@ export class IncidentController {
 
   static async delete(req: Request, res: Response) {
     const id = req.params.id as string;
-    
+
     try {
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
-      // Trava de segurança para Exclusão
       if (user.role !== 'ADMIN') {
         const incidentExistente = await prisma.incident.findUnique({ where: { id } });
-        
+
         if (!incidentExistente || incidentExistente.escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para excluir esta ocorrência." });
         }
