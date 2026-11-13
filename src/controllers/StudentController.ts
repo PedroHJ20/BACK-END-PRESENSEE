@@ -2,19 +2,29 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 
 export const StudentController = {
-  // 1. Cadastrar um novo aluno (MULTI-TENANT OTMIZADO)
+  // 1. Cadastrar um novo aluno (MULTI-TENANT OTIMIZADO + DADOS DO RESPONSÁVEL)
   async create(req: Request, res: Response) {
     try {
-      const { registration, name, email, birthDate } = req.body;
+      const {
+        registration,
+        name,
+        email,
+        birthDate,
+        guardianName,
+        guardianPhone,
+        guardianRelationship,
+        guardianEmail,
+        phone,
+        notes
+      } = req.body;
       const classId = req.body.classId || req.body.turmaId || req.body.turma;
 
       if (!classId) {
         return res.status(400).json({ error: "A turma não foi selecionada." });
       }
 
-      // 1. Pega os dados direto do middleware (sem ir ao banco)
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
@@ -28,8 +38,8 @@ export const StudentController = {
         }
       }
 
-      const finalEmail = (email && email.trim() !== "") 
-        ? email 
+      const finalEmail = (email && email.trim() !== "")
+        ? email.trim()
         : `${registration}@aluno.presensee.com`;
 
       let parsedDate = null;
@@ -45,22 +55,49 @@ export const StudentController = {
           email: finalEmail,
           birthDate: parsedDate,
           classId: String(classId),
-          escolaId // Vinculado perfeitamente!
+          escolaId
         }
       });
-      
-      return res.status(201).json(newStudent);
+
+      // Salva dados complementares (Responsável, Telefone, Observações) vinculados ao aluno sem alterar o schema
+      if (guardianName || guardianPhone || guardianEmail || phone || notes) {
+        const fichaCadastro = JSON.stringify({
+          guardianName: guardianName?.trim() || "",
+          guardianPhone: guardianPhone?.trim() || "",
+          guardianRelationship: guardianRelationship?.trim() || "",
+          guardianEmail: guardianEmail?.trim() || "",
+          phone: phone?.trim() || "",
+          notes: notes?.trim() || ""
+        });
+
+        await prisma.incident.create({
+          data: {
+            type: 'FICHA_CADASTRO',
+            description: fichaCadastro,
+            studentId: newStudent.id,
+            escolaId
+          }
+        });
+      }
+
+      return res.status(201).json({
+        ...newStudent,
+        guardianName: guardianName?.trim() || "",
+        guardianPhone: guardianPhone?.trim() || "",
+        guardianRelationship: guardianRelationship?.trim() || "",
+        guardianEmail: guardianEmail?.trim() || ""
+      });
     } catch (error: any) {
       console.error("Erro detalhado ao criar aluno:", error);
-      
+
       if (error.code === 'P2002') {
-         const campo = error.meta?.target?.[0] || error.meta?.target || "desconhecido";
-         const nomeCampo = campo === 'registration' ? 'matrícula' : campo === 'email' ? 'e-mail' : campo;
-         return res.status(400).json({ error: `Já existe um aluno registrado com este(a) ${nomeCampo}.` });
+        const campo = error.meta?.target?.[0] || error.meta?.target || "desconhecido";
+        const nomeCampo = campo === 'registration' ? 'matrícula' : campo === 'email' ? 'e-mail' : campo;
+        return res.status(400).json({ error: `Já existe um aluno registrado com este(a) ${nomeCampo}.` });
       }
-      
+
       if (error.code === 'P2003') {
-         return res.status(400).json({ error: "A turma selecionada não existe no banco de dados." });
+        return res.status(400).json({ error: "A turma selecionada não existe no banco de dados." });
       }
 
       return res.status(500).json({ error: "Erro interno ao cadastrar o aluno.", details: error.message });
@@ -71,7 +108,7 @@ export const StudentController = {
   async index(req: Request, res: Response) {
     try {
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
@@ -80,16 +117,16 @@ export const StudentController = {
 
       if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
-          return res.json([]); 
+          return res.json([]);
         }
         filtroEscola = { escolaId: user.escolaId };
       }
 
       const students = await prisma.student.findMany({
         where: filtroEscola,
-        include: { 
+        include: {
           class: true,
-          attendances: true 
+          attendances: true
         }
       });
 
@@ -121,10 +158,10 @@ export const StudentController = {
     }
   },
 
-  // 3. Buscar perfil completo de um aluno (Checagem de permissão via req.user)
+  // 3. Buscar perfil completo de um aluno (Inclui ficha de responsável e foto biométrica)
   async show(req: Request, res: Response) {
     const id = req.params.id as string;
-    
+
     try {
       const user = req.user;
 
@@ -147,19 +184,40 @@ export const StudentController = {
         return res.status(404).json({ error: "Aluno não encontrado" });
       }
 
-      // Bloqueia gestor tentando ver aluno de outra escola
       if (user.role !== 'ADMIN' && student.escolaId !== user.escolaId) {
         return res.status(403).json({ error: "Acesso negado. Este aluno não pertence à sua escola." });
       }
-      
-      return res.json(student);
+
+      // Extrai ficha cadastral do responsável (se existir) e filtra dos incidentes visíveis
+      let dadosFicha: any = {};
+      const fichaReg = student.incidents.find(i => i.type === 'FICHA_CADASTRO');
+      if (fichaReg?.description) {
+        try {
+          dadosFicha = JSON.parse(fichaReg.description);
+        } catch {
+          dadosFicha = {};
+        }
+      }
+
+      const incidentesVisiveis = student.incidents.filter(i => i.type !== 'FICHA_CADASTRO');
+
+      return res.json({
+        ...student,
+        incidents: incidentesVisiveis,
+        guardianName: dadosFicha.guardianName || "",
+        guardianPhone: dadosFicha.guardianPhone || "",
+        guardianRelationship: dadosFicha.guardianRelationship || "",
+        guardianEmail: dadosFicha.guardianEmail || "",
+        phone: dadosFicha.phone || "",
+        notes: dadosFicha.notes || ""
+      });
     } catch (error) {
       console.error("Erro ao buscar perfil do aluno:", error);
       return res.status(500).json({ error: "Erro interno ao buscar aluno" });
     }
   },
 
-  // 4. Cadastrar/Atualizar foto biométrica 
+  // 4. Cadastrar/Atualizar foto biométrica
   async uploadBiometry(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
@@ -180,16 +238,16 @@ export const StudentController = {
         return res.status(400).json({ error: "Nenhuma imagem foi enviada." });
       }
 
-      const imageUrl = req.file.path; 
+      const imageUrl = req.file.path;
 
       const student = await prisma.student.update({
         where: { id },
         data: { biometricDataUrl: imageUrl },
       });
 
-      return res.json({ 
+      return res.json({
         message: "Biometria atualizada com sucesso na nuvem!",
-        student 
+        student
       });
     } catch (error) {
       console.error("Erro detalhado no uploadBiometry:", error);
@@ -209,16 +267,15 @@ export const StudentController = {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
-      // Adicionamos a trava de segurança para o histórico:
       if (user.role !== 'ADMIN') {
-         const studentCheck = await prisma.student.findUnique({ select: { escolaId: true }, where: { id }});
-         if (!studentCheck || studentCheck.escolaId !== user.escolaId) {
-            return res.status(403).json({ error: "Acesso negado. Aluno não pertence à sua escola." });
-         }
+        const studentCheck = await prisma.student.findUnique({ select: { escolaId: true }, where: { id } });
+        if (!studentCheck || studentCheck.escolaId !== user.escolaId) {
+          return res.status(403).json({ error: "Acesso negado. Aluno não pertence à sua escola." });
+        }
       }
 
       let dateFilter = {};
-      
+
       if (month && year) {
         const startDate = new Date(Number(year), Number(month) - 1, 1);
         const endDate = new Date(Number(year), Number(month), 1);
