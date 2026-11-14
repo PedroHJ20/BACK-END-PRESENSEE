@@ -66,8 +66,9 @@ async function enviarEmailPrimeiroAcesso(params: {
   const frontendUrl = process.env.FRONTEND_URL || "https://presensee.vercel.app";
   const subject = `Bem-vindo ao PresenSee - Acesso da ${params.escolaNome}`;
   const html = montarHtmlBoasVindas({ ...params, frontendUrl });
+  let erroResend = "";
 
-  // Opção 1: API HTTP do Resend (ideal para Render, sem bloqueio de porta SMTP)
+  // Tentativa 1: API HTTP do Resend (caso configurada e com domínio válido)
   if (process.env.RESEND_API_KEY) {
     try {
       const fromAddress = process.env.RESEND_FROM || "PresenSee <onboarding@resend.dev>";
@@ -85,25 +86,25 @@ async function enviarEmailPrimeiroAcesso(params: {
         }),
       });
 
-      if (!response.ok) {
-        const detalhe = await response.text();
-        console.error("Erro Resend API:", detalhe);
-        return { enviado: false, erro: "Falha no provedor de e-mail (Resend)." };
+      if (response.ok) {
+        return { enviado: true };
       }
 
-      return { enviado: true };
+      const detalhe = await response.text();
+      console.warn("Resend não pôde enviar (tentando fallback SMTP):", detalhe);
+      erroResend = "Resend requer domínio verificado.";
     } catch (err: any) {
-      console.error("Exceção ao chamar Resend:", err);
-      return { enviado: false, erro: err?.message || "Erro de rede ao enviar e-mail." };
+      console.warn("Exceção ao chamar Resend (tentando fallback SMTP):", err);
+      erroResend = err?.message || "Erro de rede no Resend.";
     }
   }
 
-  // Opção 2: SMTP via Nodemailer (Gmail App Password ou outro servidor SMTP)
+  // Tentativa 2: SMTP via Nodemailer (Gmail App Password ou outro servidor SMTP)
   const transporter = criarTransporterSMTP();
   if (!transporter) {
     return {
       enviado: false,
-      erro: "Credenciais de e-mail (SMTP_USER/SMTP_PASS ou RESEND_API_KEY) não configuradas no .env.",
+      erro: erroResend || "Credenciais de e-mail (SMTP_USER/SMTP_PASS) não configuradas no ambiente.",
     };
   }
 
@@ -219,7 +220,6 @@ export class SchoolController {
         escola: novaEscola,
         emailEnviado: resultadoEmail.enviado,
         avisoEmail: resultadoEmail.erro || null,
-        // Retorna a senha provisória apenas se o disparo de e-mail falhar, para o admin poder repassar manualmente
         senhaProvisoriaFallback: resultadoEmail.enviado ? undefined : senhaProvisoria,
       });
     } catch (error) {
