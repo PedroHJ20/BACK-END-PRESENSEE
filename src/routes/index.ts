@@ -107,7 +107,7 @@ routes.post('/api/incidents/certificate', (req, res, next) => {
     }
     next();
   });
-}, IncidentController.create);
+}, IncidentController.uploadCertificate);
 routes.patch('/api/incidents/:id', IncidentController.update);
 routes.delete('/api/incidents/:id', IncidentController.delete);
 
