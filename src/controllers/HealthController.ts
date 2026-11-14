@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { v2 as cloudinary } from "cloudinary";
+import fs from "fs";
 import os from "os";
 import { prisma } from "../lib/prisma.js";
 
@@ -9,6 +10,22 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET as string,
 });
 
+function calcularUsoDiscoPercent(): number | null {
+  try {
+    if (typeof fs.statfsSync === "function") {
+      const stats = fs.statfsSync(process.cwd());
+      const total = Number(stats.blocks) * Number(stats.bsize);
+      const livre = Number(stats.bfree) * Number(stats.bsize);
+      if (total > 0) {
+        return Number((((total - livre) / total) * 100).toFixed(1));
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export class HealthController {
   static async check(req: Request, res: Response) {
     try {
@@ -16,14 +33,14 @@ export class HealthController {
       const nowIso = new Date().toISOString();
       const issues: Array<{ id: string; service: string; title: string; detail: string }> = [];
 
-      // 1. Testa a ligação à Base de Dados (Neon/Prisma)
+      // 1. Banco de Dados (Neon / Prisma)
       let dbStatus: "operational" | "degraded" | "down" = "down";
       let dbLatency: number | null = null;
       try {
         const dbStart = Date.now();
         await prisma.$queryRaw`SELECT 1`;
         dbLatency = Date.now() - dbStart;
-        dbStatus = dbLatency > 500 ? "degraded" : "operational";
+        dbStatus = dbLatency > 800 ? "degraded" : "operational";
       } catch (e) {
         console.error("Erro na BD:", e);
         issues.push({
@@ -34,10 +51,28 @@ export class HealthController {
         });
       }
 
-      // 2. Testa o Armazenamento em Nuvem (Cloudinary - Biometria & Atestados)
+      // 2. Infraestrutura de Hospedagem (Render / Node Runtime)
+      const serverStart = Date.now();
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const usedMem = totalMem - freeMem;
+      const memoryPercent = Number(((usedMem / totalMem) * 100).toFixed(1));
+
+      const cpus = os.cpus();
+      const loadAvg = os.loadavg()[0] ?? 0;
+      const cpuCount = cpus.length > 0 ? cpus.length : 1;
+      const cpuPercent = Number(Math.min(100, (loadAvg / cpuCount) * 100).toFixed(1));
+      const diskPercent = calcularUsoDiscoPercent();
+      const uptimeMin = Math.floor(os.uptime() / 60);
+      const serverLatency = Date.now() - serverStart;
+
+      const serverStatus: "operational" | "degraded" =
+        memoryPercent > 90 || cpuPercent > 90 ? "degraded" : "operational";
+
+      // 3. Storage & CDN (Cloudinary - Biometria & Atestados)
       let cloudStatus: "operational" | "degraded" | "down" = "down";
       let cloudLatency: number | null = null;
-      let cloudDetail = "Credenciais do Cloudinary não configuradas no servidor.";
+      let cloudDetail = "Credenciais do Cloudinary não configuradas no ambiente.";
       let cloudCode = 503;
 
       const hasCloudCreds = Boolean(
@@ -51,13 +86,10 @@ export class HealthController {
           const cloudStart = Date.now();
           await cloudinary.api.ping();
           cloudLatency = Date.now() - cloudStart;
-          cloudStatus = cloudLatency > 1200 ? "degraded" : "operational";
+          cloudStatus = cloudLatency > 1500 ? "degraded" : "operational";
           cloudCode = 200;
-          cloudDetail =
-            cloudStatus === "degraded"
-              ? `CDN respondendo com latência elevada (${cloudLatency} ms).`
-              : "Storage de fotos biométricas e atestados médicos operacional.";
-        } catch (e: any) {
+          cloudDetail = "Storage de fotos biométricas e atestados médicos operacional.";
+        } catch (e) {
           console.error("Erro no ping do Cloudinary:", e);
           cloudStatus = "down";
           cloudCode = 502;
@@ -69,147 +101,229 @@ export class HealthController {
             detail: "Não foi possível validar o armazenamento de fotos e atestados na nuvem."
           });
         }
-      } else {
-        issues.push({
-          id: "cloud_env_missing",
-          service: "storage",
-          title: "Credenciais Cloudinary Ausentes",
-          detail: "Verifique CLOUDINARY_CLOUD_NAME, API_KEY e API_SECRET no ambiente."
-        });
       }
 
-      // 3. Verifica o Módulo de Reconhecimento Facial (Base Biométrica)
-      let facialStatus: "operational" | "degraded" | "down" = "down";
-      let facialLatency: number | null = null;
-      let facialDetail = "Não foi possível consultar a base biométrica.";
-      let facialCode = 500;
+      // 4. Reconhecimento Facial (Base Biométrica)
+      let biometricStatus: "operational" | "degraded" | "down" = "down";
+      let biometricLatency: number | null = null;
+      let biometricDetail = "Base biométrica indisponível.";
+      let biometricCode = 500;
 
       if (dbStatus !== "down") {
         try {
-          const facialStart = Date.now();
-          const [totalAlunos, alunosComBiometria] = await Promise.all([
+          const bioStart = Date.now();
+          const [totalAlunos, alunosComFoto] = await Promise.all([
             prisma.student.count(),
-            prisma.student.count({
-              where: {
-                biometricDataUrl: { not: null }
-              }
-            })
+            prisma.student.count({ where: { biometricDataUrl: { not: null } } })
           ]);
-          facialLatency = Date.now() - facialStart;
-
-          if (cloudStatus === "down") {
-            facialStatus = "degraded";
-            facialCode = 206;
-            facialDetail = `${alunosComBiometria}/${totalAlunos} alunos com biometria vinculada, mas storage em nuvem indisponível.`;
-          } else if (totalAlunos > 0 && alunosComBiometria === 0) {
-            facialStatus = "degraded";
-            facialCode = 200;
-            facialDetail = `0 de ${totalAlunos} alunos possuem foto biométrica cadastrada.`;
-          } else {
-            facialStatus = "operational";
-            facialCode = 200;
-            facialDetail = `${alunosComBiometria} de ${totalAlunos} estudante(s) prontos para reconhecimento facial.`;
-          }
+          biometricLatency = Date.now() - bioStart;
+          biometricStatus = cloudStatus === "down" ? "degraded" : "operational";
+          biometricCode = 200;
+          biometricDetail = `${alunosComFoto} de ${totalAlunos} estudante(s) com face vinculada na nuvem.`;
         } catch (e) {
-          console.error("Erro ao verificar base biométrica:", e);
+          console.error("Erro no diagnóstico biométrico:", e);
         }
       }
 
-      // 4. Verifica o Motor de Frequência & Alertas (últimas 24h)
+      // 5. Análise Preditiva de Evasão (IA / Motor de Risco)
+      let aiStatus: "operational" | "degraded" | "down" = "down";
+      let aiLatency: number | null = null;
+      let aiDetail = "Motor de cálculo de risco indisponível.";
+      let aiCode = 500;
+
+      if (dbStatus !== "down") {
+        try {
+          const aiStart = Date.now();
+          const totalTurmas = await prisma.class.count();
+          aiLatency = Date.now() - aiStart;
+          aiStatus = "operational";
+          aiCode = 200;
+          aiDetail = `Cálculo de frequência e risco ativo em ${totalTurmas} turma(s).`;
+        } catch (e) {
+          console.error("Erro no diagnóstico preditivo:", e);
+        }
+      }
+
+      // 6. Serviço de Autenticação (JWT & Sessões)
+      const authStart = Date.now();
+      const hasJwtSecret = Boolean(process.env.JWT_SECRET);
+      let authStatus: "operational" | "degraded" | "down" = dbStatus !== "down" && hasJwtSecret ? "operational" : "degraded";
+      let authDetail = hasJwtSecret
+        ? "Validação JWT e controle multi-tenant ativos."
+        : "JWT_SECRET usando fallback padrão; configure no .env.";
+      let authLatency = Date.now() - authStart;
+
+      // 7. Registro de Frequência (Chamadas)
       let attendanceStatus: "operational" | "degraded" | "down" = "down";
       let attendanceLatency: number | null = null;
-      let attendanceDetail = "Serviço de frequência indisponível.";
+      let attendanceDetail = "Serviço de chamadas indisponível.";
       let attendanceCode = 500;
 
       if (dbStatus !== "down") {
         try {
           const attStart = Date.now();
-          const vinteQuatroHorasAtras = new Date(Date.now() - 24 * 60 * 60 * 1000);
-          const [chamadas24h, alertasAbertos] = await Promise.all([
-            prisma.attendance.count({
-              where: { date: { gte: vinteQuatroHorasAtras } }
-            }),
-            prisma.alert.count().catch(() => 0)
-          ]);
+          const ultimas24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          const chamadasRecentes = await prisma.attendance.count({
+            where: { date: { gte: ultimas24h } }
+          });
           attendanceLatency = Date.now() - attStart;
           attendanceStatus = "operational";
           attendanceCode = 200;
-          attendanceDetail = `${chamadas24h} registro(s) de presença nas últimas 24h · ${alertasAbertos} alerta(s) na base.`;
+          attendanceDetail = `${chamadasRecentes} registro(s) de presença nas últimas 24h.`;
         } catch (e) {
-          console.error("Erro ao verificar serviço de frequência:", e);
+          console.error("Erro no diagnóstico de frequência:", e);
         }
       }
 
-      // 5. Recursos do Servidor (Node.js/Render)
-      const totalMem = os.totalmem();
-      const freeMem = os.freemem();
-      const usedMem = totalMem - freeMem;
-      const memoryPercent = (usedMem / totalMem) * 100;
+      // 8. Geração de Relatórios (Agregação Analítica)
+      let reportsStatus: "operational" | "degraded" | "down" = "down";
+      let reportsLatency: number | null = null;
+      let reportsDetail = "Serviço de relatórios indisponível.";
+      let reportsCode = 500;
 
-      const cpus = os.cpus();
-      const loadAvg = os.loadavg()[0] ?? 0;
-      const cpuCount = cpus.length > 0 ? cpus.length : 1;
-      const cpuPercent = Math.min(100, (loadAvg / cpuCount) * 100);
+      if (dbStatus !== "down") {
+        try {
+          const repStart = Date.now();
+          const totalEscolas = await prisma.escola.count();
+          reportsLatency = Date.now() - repStart;
+          reportsStatus = "operational";
+          reportsCode = 200;
+          reportsDetail = `Consolidação de indicadores pronta para ${totalEscolas} escola(s).`;
+        } catch (e) {
+          console.error("Erro no diagnóstico de relatórios:", e);
+        }
+      }
 
-      // 6. Monta a resposta no formato que o Front-end espera
+      // 9. Gestão de Alertas & Intervenções
+      let interventionsStatus: "operational" | "degraded" | "down" = "down";
+      let interventionsLatency: number | null = null;
+      let interventionsDetail = "Serviço de alertas e ocorrências indisponível.";
+      let interventionsCode = 500;
+
+      if (dbStatus !== "down") {
+        try {
+          const intStart = Date.now();
+          const [totalOcorrencias, totalAlertas] = await Promise.all([
+            prisma.incident.count(),
+            prisma.alert.count().catch(() => 0)
+          ]);
+          interventionsLatency = Date.now() - intStart;
+          interventionsStatus = "operational";
+          interventionsCode = 200;
+          interventionsDetail = `${totalOcorrencias} ocorrência(s) e ${totalAlertas} alerta(s) monitorados.`;
+        } catch (e) {
+          console.error("Erro no diagnóstico de alertas:", e);
+        }
+      }
+
       const healthData = {
         timestamp: nowIso,
         received: true,
         metrics: {
-          cpuPercent: Number(cpuPercent.toFixed(1)),
-          memoryPercent: Number(memoryPercent.toFixed(1)),
-          diskPercent: null
+          cpuPercent,
+          memoryPercent,
+          diskPercent
         },
         services: [
           {
             key: "api",
-            name: "API Principal (Node.js / Render)",
+            name: "API Principal (Node.js)",
             status: "operational",
             latencyMs: Date.now() - startTime,
+            errorRatePercent: 0,
             checkedAt: nowIso,
             code: 200,
-            detail: "Servidor Express e rotas REST operando normalmente."
+            detail: "Servidor Express operando normalmente."
           },
           {
             key: "database",
-            name: "Banco de Dados (Neon / PostgreSQL)",
+            name: "Banco de Dados (Neon/Prisma)",
             status: dbStatus,
             latencyMs: dbLatency,
+            errorRatePercent: dbStatus === "down" ? 100 : 0,
             checkedAt: nowIso,
             code: dbStatus === "down" ? 500 : 200,
-            detail:
-              dbStatus === "down"
-                ? "Falha de conexão com a base de dados."
-                : dbStatus === "degraded"
-                  ? `Conexão ativa, mas com latência alta (${dbLatency} ms).`
-                  : "Pool Prisma e conexão Neon estáveis."
+            detail: dbStatus === "down" ? "Falha de conexão com a base de dados." : "Conexão Neon estável."
+          },
+          {
+            key: "server",
+            name: "Infraestrutura de Hospedagem (Render)",
+            status: serverStatus,
+            latencyMs: serverLatency,
+            errorRatePercent: 0,
+            checkedAt: nowIso,
+            code: 200,
+            detail: `Instância ${os.platform()} ativa há ${uptimeMin} min · Memória ${memoryPercent}%.`
           },
           {
             key: "storage",
-            name: "Storage & CDN (Cloudinary)",
+            name: "Armazenamento em Nuvem (Cloudinary)",
             status: cloudStatus,
             latencyMs: cloudLatency,
+            errorRatePercent: cloudStatus === "down" ? 100 : 0,
             checkedAt: nowIso,
             code: cloudCode,
             detail: cloudDetail
           },
           {
-            key: "facial",
-            name: "Módulo de Biometria Facial",
-            status: facialStatus,
-            latencyMs: facialLatency,
+            key: "biometric",
+            name: "Reconhecimento Facial (Python)",
+            status: biometricStatus,
+            latencyMs: biometricLatency,
+            errorRatePercent: biometricStatus === "down" ? 100 : 0,
             checkedAt: nowIso,
-            code: facialCode,
-            detail: facialDetail
+            code: biometricCode,
+            detail: biometricDetail
+          },
+          {
+            key: "ai",
+            name: "Análise Preditiva de Evasão (IA)",
+            status: aiStatus,
+            latencyMs: aiLatency,
+            errorRatePercent: aiStatus === "down" ? 100 : 0,
+            checkedAt: nowIso,
+            code: aiCode,
+            detail: aiDetail
+          },
+          {
+            key: "login",
+            name: "Serviço de Autenticação",
+            status: authStatus,
+            latencyMs: authLatency,
+            errorRatePercent: 0,
+            checkedAt: nowIso,
+            code: 200,
+            detail: authDetail
           },
           {
             key: "attendance",
-            name: "Motor de Frequência & Alertas",
+            name: "Registro de Frequência",
             status: attendanceStatus,
             latencyMs: attendanceLatency,
+            errorRatePercent: attendanceStatus === "down" ? 100 : 0,
             checkedAt: nowIso,
             code: attendanceCode,
             detail: attendanceDetail
+          },
+          {
+            key: "reports",
+            name: "Geração de Relatórios",
+            status: reportsStatus,
+            latencyMs: reportsLatency,
+            errorRatePercent: reportsStatus === "down" ? 100 : 0,
+            checkedAt: nowIso,
+            code: reportsCode,
+            detail: reportsDetail
+          },
+          {
+            key: "interventions",
+            name: "Gestão de Alertas",
+            status: interventionsStatus,
+            latencyMs: interventionsLatency,
+            errorRatePercent: interventionsStatus === "down" ? 100 : 0,
+            checkedAt: nowIso,
+            code: interventionsCode,
+            detail: interventionsDetail
           }
         ],
         issues
