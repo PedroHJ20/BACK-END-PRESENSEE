@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
 import { v2 as cloudinary } from "cloudinary";
-import fs from "fs";
 import os from "os";
 import { prisma } from "../lib/prisma.js";
 
@@ -10,20 +9,11 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET as string,
 });
 
-function calcularUsoDiscoPercent(): number | null {
-  try {
-    if (typeof fs.statfsSync === "function") {
-      const stats = fs.statfsSync(process.cwd());
-      const total = Number(stats.blocks) * Number(stats.bsize);
-      const livre = Number(stats.bfree) * Number(stats.bsize);
-      if (total > 0) {
-        return Number((((total - livre) / total) * 100).toFixed(1));
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
+function formatarBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return "0 MB";
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
 }
 
 export class HealthController {
@@ -62,18 +52,18 @@ export class HealthController {
       const loadAvg = os.loadavg()[0] ?? 0;
       const cpuCount = cpus.length > 0 ? cpus.length : 1;
       const cpuPercent = Number(Math.min(100, (loadAvg / cpuCount) * 100).toFixed(1));
-      const diskPercent = calcularUsoDiscoPercent();
       const uptimeMin = Math.floor(os.uptime() / 60);
       const serverLatency = Date.now() - serverStart;
 
       const serverStatus: "operational" | "degraded" =
         memoryPercent > 90 || cpuPercent > 90 ? "degraded" : "operational";
 
-      // 3. Storage & CDN (Cloudinary - Biometria & Atestados)
+      // 3. Storage & CDN (Cloudinary - Uso real da cota em nuvem)
       let cloudStatus: "operational" | "degraded" | "down" = "down";
       let cloudLatency: number | null = null;
       let cloudDetail = "Credenciais do Cloudinary não configuradas no ambiente.";
       let cloudCode = 503;
+      let cloudDiskPercent: number | null = null;
 
       const hasCloudCreds = Boolean(
         process.env.CLOUDINARY_CLOUD_NAME &&
@@ -84,13 +74,31 @@ export class HealthController {
       if (hasCloudCreds) {
         try {
           const cloudStart = Date.now();
-          await cloudinary.api.ping();
+          const usage = await cloudinary.api.usage();
           cloudLatency = Date.now() - cloudStart;
-          cloudStatus = cloudLatency > 1500 ? "degraded" : "operational";
+
+          const storageUsedBytes = Number(usage?.storage?.usage ?? 0);
+          const storageLimitBytes = Number(usage?.storage?.limit ?? 0);
+          const creditsUsedPercent = Number(usage?.credits?.used_percent ?? 0);
+
+          if (storageLimitBytes > 0) {
+            cloudDiskPercent = Number(((storageUsedBytes / storageLimitBytes) * 100).toFixed(1));
+          } else if (creditsUsedPercent > 0) {
+            cloudDiskPercent = Number(creditsUsedPercent.toFixed(1));
+          } else {
+            // Plano gratuito padrão do Cloudinary (25 GB = 25 * 1024^3 bytes)
+            const cotaPadraoBytes = 25 * 1024 * 1024 * 1024;
+            cloudDiskPercent = Number(Math.min(100, (storageUsedBytes / cotaPadraoBytes) * 100).toFixed(1));
+          }
+
+          cloudStatus =
+            (cloudDiskPercent !== null && cloudDiskPercent >= 90) || cloudLatency > 1800
+              ? "degraded"
+              : "operational";
           cloudCode = 200;
-          cloudDetail = "Storage de fotos biométricas e atestados médicos operacional.";
+          cloudDetail = `Storage operacional · ${formatarBytes(storageUsedBytes)} utilizados (${cloudDiskPercent}% da cota).`;
         } catch (e) {
-          console.error("Erro no ping do Cloudinary:", e);
+          console.error("Erro ao consultar uso do Cloudinary:", e);
           cloudStatus = "down";
           cloudCode = 502;
           cloudDetail = "Falha ao autenticar ou alcançar a API do Cloudinary.";
@@ -147,11 +155,11 @@ export class HealthController {
       // 6. Serviço de Autenticação (JWT & Sessões)
       const authStart = Date.now();
       const hasJwtSecret = Boolean(process.env.JWT_SECRET);
-      let authStatus: "operational" | "degraded" | "down" = dbStatus !== "down" && hasJwtSecret ? "operational" : "degraded";
-      let authDetail = hasJwtSecret
+      const authStatus: "operational" | "degraded" = dbStatus !== "down" && hasJwtSecret ? "operational" : "degraded";
+      const authDetail = hasJwtSecret
         ? "Validação JWT e controle multi-tenant ativos."
         : "JWT_SECRET usando fallback padrão; configure no .env.";
-      let authLatency = Date.now() - authStart;
+      const authLatency = Date.now() - authStart;
 
       // 7. Registro de Frequência (Chamadas)
       let attendanceStatus: "operational" | "degraded" | "down" = "down";
@@ -222,7 +230,7 @@ export class HealthController {
         metrics: {
           cpuPercent,
           memoryPercent,
-          diskPercent
+          diskPercent: cloudDiskPercent
         },
         services: [
           {
