@@ -12,7 +12,7 @@ import { ChamadoController } from '../controllers/ChamadoController.js';
 import { ComunicadoController } from '../controllers/ComunicadoController.js';
 import { HealthController } from '../controllers/HealthController.js';
 import { AuditoriaController } from '../controllers/AuditoriaController.js';
-import { upload } from '../middlewares/upload.js';
+import { upload, uploadAtestado } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const routes = Router();
@@ -22,7 +22,7 @@ routes.get('/api/status', (req, res) => {
   res.json({ message: "O backend do PresenSee está ativo!" });
 });
 routes.post('/api/login', AuthController.login);
-routes.post('/api/setup', AuthController.setup); 
+routes.post('/api/setup', AuthController.setup);
 routes.post('/api/change-initial-password', AuthController.changeInitialPassword);
 
 // Middleware de Autenticação (Requer Token JWT)
@@ -37,13 +37,22 @@ routes.get('/api/dashboard', DashboardController.getSummary);
 routes.post('/api/escolas', SchoolController.create);
 routes.get('/api/escolas', SchoolController.index);
 routes.patch('/api/escolas/:id/status', SchoolController.updateStatus);
+routes.post('/api/escolas/:id/reenviar-acesso', SchoolController.resendAccess);
 routes.delete('/api/escolas/:id', SchoolController.delete);
 
 // Usuários / Gestores
 routes.post('/api/users', UserController.create);
 routes.get('/api/users', UserController.index);
 routes.patch('/api/users/:id', UserController.update);
-routes.patch('/api/users/:id/avatar', upload.single('photo'), UserController.uploadAvatar);
+routes.patch('/api/users/:id/avatar', (req, res, next) => {
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      console.error("Erro no upload de avatar:", err);
+      return res.status(400).json({ error: "Falha no upload da foto de perfil", detalhes: err.message || err });
+    }
+    next();
+  });
+}, UserController.uploadAvatar);
 routes.delete('/api/users/:id', UserController.delete);
 
 // Chamados de Suporte
@@ -70,8 +79,8 @@ routes.get('/api/classes', ClassController.index);
 
 // Alunos
 routes.post('/api/students', StudentController.create);
-routes.get('/api/students', StudentController.index); 
-routes.get('/api/students/:id', StudentController.show); 
+routes.get('/api/students', StudentController.index);
+routes.get('/api/students/:id', StudentController.show);
 routes.patch('/api/students/:id/biometry', (req, res, next) => {
   upload.single('photo')(req, res, (err) => {
     if (err) {
@@ -81,15 +90,24 @@ routes.patch('/api/students/:id/biometry', (req, res, next) => {
     next();
   });
 }, StudentController.uploadBiometry);
-routes.get('/api/students/:id/attendance-history', StudentController.attendanceHistory); 
+routes.get('/api/students/:id/attendance-history', StudentController.attendanceHistory);
 
 // Frequência e Alertas
 routes.post('/api/attendances', AttendanceController.create);
 routes.get('/api/alerts', AttendanceController.listAlerts);
 
-// Ocorrências (Diário do Monitor e Intervenções)
+// Ocorrências (Diário do Monitor, Intervenções e Atestados)
 routes.get('/api/incidents', IncidentController.index);
 routes.post('/api/incidents', IncidentController.create);
+routes.post('/api/incidents/certificate', (req, res, next) => {
+  uploadAtestado.single('file')(req, res, (err) => {
+    if (err) {
+      console.error("Erro no upload de atestado:", err);
+      return res.status(400).json({ error: "Falha no upload do atestado", detalhes: err.message || err });
+    }
+    next();
+  });
+}, IncidentController.create);
 routes.patch('/api/incidents/:id', IncidentController.update);
 routes.delete('/api/incidents/:id', IncidentController.delete);
 
