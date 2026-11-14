@@ -1,21 +1,22 @@
 import type { Request, Response } from "express";
-import { prisma } from '../lib/prisma.js';
+import { prisma } from "../lib/prisma.js";
+import { AuditoriaController } from "./AuditoriaController.js";
 import crypto from "crypto";
 
 export class ChamadoController {
   static async index(req: Request, res: Response) {
     try {
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
       let whereClause: any = {};
 
-      if (user.role !== 'ADMIN') {
+      if (user.role !== "ADMIN") {
         if (!user.escolaId) {
-          return res.json([]); 
+          return res.json([]);
         }
         whereClause = { escolaId: user.escolaId };
       }
@@ -24,7 +25,7 @@ export class ChamadoController {
         where: whereClause,
         orderBy: { atualizadoEm: "desc" }
       });
-      
+
       return res.json(chamados);
     } catch (error) {
       console.error("Erro ao buscar chamados:", error);
@@ -35,7 +36,7 @@ export class ChamadoController {
   static async create(req: Request, res: Response) {
     try {
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
@@ -43,14 +44,13 @@ export class ChamadoController {
       const dados = req.body;
       let escolaId = req.body.escolaId;
 
-      if (user.role !== 'ADMIN') {
+      if (user.role !== "ADMIN") {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Usuário sem escola vinculada não pode abrir chamados." });
         }
         escolaId = user.escolaId;
       }
 
-      // Busca dados completos do usuário e da escola para garantir preenchimento mesmo se o front omitir
       const usuarioCompleto = await prisma.user.findUnique({
         where: { id: user.id },
         include: { escola: true }
@@ -81,7 +81,15 @@ export class ChamadoController {
           }]
         }
       });
-      
+
+      await AuditoriaController.logAction(
+        "CHAMADO",
+        `Chamado aberto: ${novoChamado.titulo}`,
+        `Escola: ${nomeEscola} | Categoria: ${novoChamado.categoria} | Prioridade: ${novoChamado.prioridade}`,
+        nomeSolicitante,
+        "Chamado"
+      );
+
       return res.status(201).json(novoChamado);
     } catch (error) {
       console.error("Erro ao criar chamado:", error);
@@ -94,18 +102,18 @@ export class ChamadoController {
       const id = req.params.id as string;
       const dados = req.body;
       const user = req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
       const chamadoAtual = await prisma.chamado.findUnique({ where: { id } });
-      
+
       if (!chamadoAtual) {
         return res.status(404).json({ error: "Chamado não encontrado" });
       }
 
-      if (user.role !== 'ADMIN') {
+      if (user.role !== "ADMIN") {
         if ((chamadoAtual as any).escolaId !== user.escolaId) {
           return res.status(403).json({ error: "Sem permissão para atualizar este chamado." });
         }
@@ -135,6 +143,19 @@ export class ChamadoController {
           historico: historicoAtual
         }
       });
+
+      const responsavelAcao = user.role === "ADMIN" ? "Administrador" : (chamadoAtual.solicitante || "Gestor");
+      const mudancaStatus = dados.status && dados.status !== chamadoAtual.status;
+
+      await AuditoriaController.logAction(
+        "CHAMADO",
+        mudancaStatus
+          ? `Chamado ${dados.status.toLowerCase()}: ${atualizado.titulo}`
+          : `Chamado atualizado: ${atualizado.titulo}`,
+        `Escola: ${atualizado.escola} | Status: ${atualizado.status}${dados.novaMensagem ? " | Nova mensagem registrada" : ""}`,
+        responsavelAcao,
+        "Chamado"
+      );
 
       return res.json(atualizado);
     } catch (error) {

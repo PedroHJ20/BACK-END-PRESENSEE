@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { prisma } from '../lib/prisma.js';
+import { prisma } from "../lib/prisma.js";
 import { AuditoriaController } from "./AuditoriaController.js";
 
 export class ComunicadoController {
@@ -12,7 +12,7 @@ export class ComunicadoController {
       }
 
       // Admin visualiza todos os comunicados (incluindo rascunhos)
-      if (user.role === 'ADMIN') {
+      if (user.role === "ADMIN") {
         const comunicados = await prisma.comunicado.findMany({
           orderBy: { alteradoEm: "desc" }
         });
@@ -56,7 +56,7 @@ export class ComunicadoController {
   static async create(req: Request, res: Response) {
     try {
       const user = req.user;
-      if (!user || user.role !== 'ADMIN') {
+      if (!user || user.role !== "ADMIN") {
         return res.status(403).json({ error: "Apenas administradores podem criar comunicados." });
       }
 
@@ -93,7 +93,7 @@ export class ComunicadoController {
   static async update(req: Request, res: Response) {
     try {
       const user = req.user;
-      if (!user || user.role !== 'ADMIN') {
+      if (!user || user.role !== "ADMIN") {
         return res.status(403).json({ error: "Apenas administradores podem editar comunicados." });
       }
 
@@ -106,7 +106,7 @@ export class ComunicadoController {
       if (dados.tipo !== undefined) updateData.tipo = dados.tipo;
       if (dados.publico !== undefined) updateData.publico = dados.publico;
       if (dados.status !== undefined) updateData.status = dados.status;
-      
+
       if (dados.escolas !== undefined) {
         updateData.escolas = Array.isArray(dados.escolas) ? dados.escolas : [];
       }
@@ -125,15 +125,15 @@ export class ComunicadoController {
         data: updateData
       });
 
-      if (dados.status === "Publicado") {
-        await AuditoriaController.logAction(
-          "COMUNICADO",
-          `Comunicado publicado: ${atualizado.titulo}`,
-          `Enviado para: ${atualizado.publico}`,
-          "Administrador",
-          "Comunicado"
-        );
-      }
+      await AuditoriaController.logAction(
+        "COMUNICADO",
+        dados.status === "Publicado"
+          ? `Comunicado publicado: ${atualizado.titulo}`
+          : `Comunicado atualizado: ${atualizado.titulo}`,
+        `Status: ${atualizado.status} | Enviado para: ${atualizado.publico}`,
+        "Administrador",
+        "Comunicado"
+      );
 
       return res.json(atualizado);
     } catch (error) {
@@ -145,12 +145,22 @@ export class ComunicadoController {
   static async delete(req: Request, res: Response) {
     try {
       const user = req.user;
-      if (!user || user.role !== 'ADMIN') {
+      if (!user || user.role !== "ADMIN") {
         return res.status(403).json({ error: "Apenas administradores podem excluir comunicados." });
       }
 
       const id = req.params.id as string;
+      const existente = await prisma.comunicado.findUnique({ where: { id } });
       await prisma.comunicado.delete({ where: { id } });
+
+      await AuditoriaController.logAction(
+        "COMUNICADO",
+        `Comunicado excluído: ${existente?.titulo || id}`,
+        `Público anterior: ${existente?.publico || "Não informado"}`,
+        "Administrador",
+        "Comunicado"
+      );
+
       return res.status(204).send();
     } catch (error) {
       console.error("Erro ao excluir comunicado:", error);

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
+import { AuditoriaController } from "./AuditoriaController.js";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
@@ -63,12 +64,11 @@ async function enviarEmailPrimeiroAcesso(params: {
   gestorEmail: string;
   senhaProvisoria: string;
 }): Promise<{ enviado: boolean; erro?: string }> {
-  const frontendUrl = process.env.FRONTEND_URL || "https://presensee.vercel.app";
+  const frontendUrl = process.env.FRONTEND_URL || "https://presensee.com.br";
   const subject = `Bem-vindo ao PresenSee - Acesso da ${params.escolaNome}`;
   const html = montarHtmlBoasVindas({ ...params, frontendUrl });
   let erroResend = "";
 
-  // Tentativa 1: API HTTP do Resend (caso configurada e com domínio válido)
   if (process.env.RESEND_API_KEY) {
     try {
       const fromAddress = process.env.RESEND_FROM || "PresenSee <onboarding@resend.dev>";
@@ -99,7 +99,6 @@ async function enviarEmailPrimeiroAcesso(params: {
     }
   }
 
-  // Tentativa 2: SMTP via Nodemailer (Gmail App Password ou outro servidor SMTP)
   const transporter = criarTransporterSMTP();
   if (!transporter) {
     return {
@@ -206,6 +205,14 @@ export class SchoolController {
         senhaProvisoria,
       });
 
+      await AuditoriaController.logAction(
+        "ESCOLA",
+        `Escola cadastrada: ${novaEscola.nome}`,
+        `Gestor: ${String(gestorNome).trim()} (${emailLimpo}) | Município: ${municipio || "Não informado"}`,
+        "Administrador",
+        "Escola"
+      );
+
       console.log(`\n=========================================`);
       console.log(`🏫 NOVA ESCOLA CADASTRADA COM SUCESSO!`);
       console.log(`📧 Gestor: ${emailLimpo}`);
@@ -264,6 +271,14 @@ export class SchoolController {
         senhaProvisoria: novaSenhaProvisoria,
       });
 
+      await AuditoriaController.logAction(
+        "ESCOLA",
+        `Acesso reenviado: ${escola.nome}`,
+        `Novas credenciais geradas para ${gestor.name} (${gestor.email})`,
+        "Administrador",
+        "Escola"
+      );
+
       return res.json({
         message: resultadoEmail.enviado
           ? `Novas credenciais enviadas para ${gestor.email}!`
@@ -311,6 +326,15 @@ export class SchoolController {
         where: { id },
         data: { status },
       });
+
+      await AuditoriaController.logAction(
+        "ESCOLA",
+        `Status da escola alterado: ${escola.nome}`,
+        `Nova situação definida: ${status}`,
+        "Administrador",
+        "Escola"
+      );
+
       return res.json(escola);
     } catch (error) {
       console.error("Erro ao atualizar status da escola:", error);
@@ -327,6 +351,7 @@ export class SchoolController {
       }
 
       const id = req.params.id as string;
+      const escolaExistente = await prisma.escola.findUnique({ where: { id } });
 
       await prisma.$transaction(async (tx) => {
         await tx.chamado.deleteMany({ where: { escolaId: id } });
@@ -338,6 +363,14 @@ export class SchoolController {
         await tx.user.deleteMany({ where: { escolaId: id } });
         await tx.escola.delete({ where: { id } });
       });
+
+      await AuditoriaController.logAction(
+        "ESCOLA",
+        `Escola excluída: ${escolaExistente?.nome || id}`,
+        `Instituição e todos os dados vinculados (gestor, turmas, alunos e chamados) foram removidos.`,
+        "Administrador",
+        "Escola"
+      );
 
       return res.status(204).send();
     } catch (error) {
