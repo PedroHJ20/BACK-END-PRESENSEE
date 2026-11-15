@@ -93,6 +93,7 @@ routes.patch('/api/students/:id/biometry', (req, res, next) => {
 routes.get('/api/students/:id/attendance-history', StudentController.attendanceHistory);
 
 // Frequência e Alertas
+routes.get('/api/attendances', AttendanceController.index);
 routes.post('/api/attendances', AttendanceController.create);
 routes.get('/api/alerts', AttendanceController.listAlerts);
 
