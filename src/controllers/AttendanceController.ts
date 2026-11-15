@@ -56,14 +56,26 @@ export const AttendanceController = {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
-      // Trava de segurança Multi-Tenant
-      if (user.role !== 'ADMIN') {
-        const student = await prisma.student.findUnique({ where: { id: studentId } });
-
-        if (!student || student.escolaId !== user.escolaId) {
-          return res.status(403).json({ error: "Acesso negado. O aluno não pertence à sua instituição." });
-        }
+      if (!studentId) {
+        return res.status(400).json({ error: "O ID do aluno (studentId) é obrigatório." });
       }
+
+      const student = await prisma.student.findUnique({
+        where: { id: String(studentId) },
+      });
+
+      if (!student) {
+        return res.status(404).json({ error: "Aluno não encontrado." });
+      }
+
+      // Trava de segurança Multi-Tenant
+      if (user.role !== 'ADMIN' && student.escolaId !== user.escolaId) {
+        return res.status(403).json({ error: "Acesso negado. O aluno não pertence à sua instituição." });
+      }
+
+      // Garante o classId real do aluno mesmo se o Totem estiver em modo "TODAS"
+      const turmaFinalId =
+        classId && String(classId) !== 'TODAS' ? String(classId) : student.classId;
 
       // Define o intervalo do dia atual no fuso de Brasília/Recife (-03:00)
       const agora = new Date();
@@ -74,7 +86,7 @@ export const AttendanceController = {
       // Verifica se já existe registro de frequência para este aluno hoje
       const registroExistente = await prisma.attendance.findFirst({
         where: {
-          studentId,
+          studentId: student.id,
           date: {
             gte: inicioDia,
             lte: fimDia,
@@ -92,8 +104,8 @@ export const AttendanceController = {
 
       const attendance = await prisma.attendance.create({
         data: {
-          studentId,
-          classId,
+          studentId: student.id,
+          classId: turmaFinalId,
           status: status || 'PRESENT',
           date: agora,
         },
