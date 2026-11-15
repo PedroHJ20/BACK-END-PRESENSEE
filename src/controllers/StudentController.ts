@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 
 export const StudentController = {
-  // 1. Cadastrar um novo aluno (MULTI-TENANT OTIMIZADO + DADOS DO RESPONSÁVEL)
+  // 1. Cadastrar um novo aluno (MULTI-TENANT + FICHA COMPLETA DE RESPONSÁVEL E ENDEREÇO)
   async create(req: Request, res: Response) {
     try {
       const {
@@ -10,12 +10,26 @@ export const StudentController = {
         name,
         email,
         birthDate,
+        gender,
+        cpf,
         guardianName,
         guardianPhone,
         guardianRelationship,
         guardianEmail,
         phone,
-        notes
+        notes,
+        cep,
+        zipCode,
+        rua,
+        street,
+        numero,
+        number,
+        bairro,
+        neighborhood,
+        cidade,
+        city,
+        estado,
+        state
       } = req.body;
       const classId = req.body.classId || req.body.turmaId || req.body.turma;
 
@@ -59,20 +73,30 @@ export const StudentController = {
         }
       });
 
-      if (guardianName || guardianPhone || guardianEmail || phone || notes) {
-        const fichaCadastro = JSON.stringify({
-          guardianName: guardianName?.trim() || "",
-          guardianPhone: guardianPhone?.trim() || "",
-          guardianRelationship: guardianRelationship?.trim() || "",
-          guardianEmail: guardianEmail?.trim() || "",
-          phone: phone?.trim() || "",
-          notes: notes?.trim() || ""
-        });
+      const dadosComplementares = {
+        gender: gender?.trim() || "",
+        cpf: cpf?.trim() || "",
+        guardianName: guardianName?.trim() || "",
+        guardianPhone: guardianPhone?.trim() || "",
+        guardianRelationship: guardianRelationship?.trim() || "",
+        guardianEmail: guardianEmail?.trim() || "",
+        phone: phone?.trim() || "",
+        notes: notes?.trim() || "",
+        cep: (cep || zipCode)?.trim() || "",
+        rua: (rua || street)?.trim() || "",
+        numero: (numero || number)?.trim() || "",
+        bairro: (bairro || neighborhood)?.trim() || "",
+        cidade: (cidade || city)?.trim() || "",
+        estado: (estado || state)?.trim() || ""
+      };
 
+      const temDadosFicha = Object.values(dadosComplementares).some((v) => v !== "");
+
+      if (temDadosFicha) {
         await prisma.incident.create({
           data: {
             type: 'FICHA_CADASTRO',
-            description: fichaCadastro,
+            description: JSON.stringify(dadosComplementares),
             studentId: newStudent.id,
             escolaId
           }
@@ -81,10 +105,7 @@ export const StudentController = {
 
       return res.status(201).json({
         ...newStudent,
-        guardianName: guardianName?.trim() || "",
-        guardianPhone: guardianPhone?.trim() || "",
-        guardianRelationship: guardianRelationship?.trim() || "",
-        guardianEmail: guardianEmail?.trim() || ""
+        ...dadosComplementares
       });
     } catch (error: any) {
       console.error("Erro detalhado ao criar aluno:", error);
@@ -103,7 +124,7 @@ export const StudentController = {
     }
   },
 
-  // 2. Listar todos os alunos (Filtrado por Escola via req.user)
+  // 2. Listar todos os alunos
   async index(req: Request, res: Response) {
     try {
       const user = req.user;
@@ -132,7 +153,7 @@ export const StudentController = {
 
       const studentsWithDashboardData = students.map(student => {
         const totalClasses = student.attendances.length;
-        const presentClasses = student.attendances.filter(a => a.status === 'PRESENT').length;
+        const presentClasses = student.attendances.filter(a => a.status === 'PRESENT' || a.status === 'EXCUSED').length;
 
         let frequency = 100;
         if (totalClasses > 0) {
@@ -142,7 +163,7 @@ export const StudentController = {
         let risk = 'Baixo';
         if (frequency < 75) {
           risk = 'Alto';
-        } else if (frequency <= 85) {
+        } else if (frequency < 90) {
           risk = 'Médio';
         }
 
@@ -158,7 +179,7 @@ export const StudentController = {
     }
   },
 
-  // 3. Buscar perfil completo de um aluno
+  // 3. Buscar perfil completo de um aluno (Inclui ficha de responsável, endereço e foto biométrica)
   async show(req: Request, res: Response) {
     const id = req.params.id as string;
 
@@ -203,12 +224,20 @@ export const StudentController = {
       return res.json({
         ...student,
         incidents: incidentesVisiveis,
+        gender: dadosFicha.gender || "",
+        cpf: dadosFicha.cpf || "",
         guardianName: dadosFicha.guardianName || "",
         guardianPhone: dadosFicha.guardianPhone || "",
         guardianRelationship: dadosFicha.guardianRelationship || "",
         guardianEmail: dadosFicha.guardianEmail || "",
         phone: dadosFicha.phone || "",
-        notes: dadosFicha.notes || ""
+        notes: dadosFicha.notes || "",
+        cep: dadosFicha.cep || "",
+        rua: dadosFicha.rua || "",
+        numero: dadosFicha.numero || "",
+        bairro: dadosFicha.bairro || "",
+        cidade: dadosFicha.cidade || "",
+        estado: dadosFicha.estado || ""
       });
     } catch (error) {
       console.error("Erro ao buscar perfil do aluno:", error);
@@ -216,7 +245,7 @@ export const StudentController = {
     }
   },
 
-  // 4. Atualizar dados do aluno e ficha do responsável
+  // 4. Atualizar dados do aluno, responsável e endereço
   async update(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
@@ -244,12 +273,26 @@ export const StudentController = {
         name,
         email,
         birthDate,
+        gender,
+        cpf,
         guardianName,
         guardianPhone,
         guardianRelationship,
         guardianEmail,
         phone,
-        notes
+        notes,
+        cep,
+        zipCode,
+        rua,
+        street,
+        numero,
+        number,
+        bairro,
+        neighborhood,
+        cidade,
+        city,
+        estado,
+        state
       } = req.body;
 
       const classId = req.body.classId || req.body.turmaId || req.body.turma;
@@ -276,13 +319,28 @@ export const StudentController = {
         include: { class: true }
       });
 
+      const cepVal = cep !== undefined ? cep : zipCode;
+      const ruaVal = rua !== undefined ? rua : street;
+      const numeroVal = numero !== undefined ? numero : number;
+      const bairroVal = bairro !== undefined ? bairro : neighborhood;
+      const cidadeVal = cidade !== undefined ? cidade : city;
+      const estadoVal = estado !== undefined ? estado : state;
+
       const temCamposFicha = [
+        gender,
+        cpf,
         guardianName,
         guardianPhone,
         guardianRelationship,
         guardianEmail,
         phone,
-        notes
+        notes,
+        cepVal,
+        ruaVal,
+        numeroVal,
+        bairroVal,
+        cidadeVal,
+        estadoVal
       ].some((v) => v !== undefined);
 
       if (temCamposFicha) {
@@ -297,12 +355,20 @@ export const StudentController = {
         }
 
         const novaFicha = JSON.stringify({
+          gender: gender !== undefined ? String(gender).trim() : (fichaAnterior.gender || ""),
+          cpf: cpf !== undefined ? String(cpf).trim() : (fichaAnterior.cpf || ""),
           guardianName: guardianName !== undefined ? String(guardianName).trim() : (fichaAnterior.guardianName || ""),
           guardianPhone: guardianPhone !== undefined ? String(guardianPhone).trim() : (fichaAnterior.guardianPhone || ""),
           guardianRelationship: guardianRelationship !== undefined ? String(guardianRelationship).trim() : (fichaAnterior.guardianRelationship || ""),
           guardianEmail: guardianEmail !== undefined ? String(guardianEmail).trim() : (fichaAnterior.guardianEmail || ""),
           phone: phone !== undefined ? String(phone).trim() : (fichaAnterior.phone || ""),
-          notes: notes !== undefined ? String(notes).trim() : (fichaAnterior.notes || "")
+          notes: notes !== undefined ? String(notes).trim() : (fichaAnterior.notes || ""),
+          cep: cepVal !== undefined ? String(cepVal).trim() : (fichaAnterior.cep || ""),
+          rua: ruaVal !== undefined ? String(ruaVal).trim() : (fichaAnterior.rua || ""),
+          numero: numeroVal !== undefined ? String(numeroVal).trim() : (fichaAnterior.numero || ""),
+          bairro: bairroVal !== undefined ? String(bairroVal).trim() : (fichaAnterior.bairro || ""),
+          cidade: cidadeVal !== undefined ? String(cidadeVal).trim() : (fichaAnterior.cidade || ""),
+          estado: estadoVal !== undefined ? String(estadoVal).trim() : (fichaAnterior.estado || "")
         });
 
         if (regFicha) {
