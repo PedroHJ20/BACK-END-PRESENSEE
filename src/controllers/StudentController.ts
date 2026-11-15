@@ -59,7 +59,6 @@ export const StudentController = {
         }
       });
 
-      // Salva dados complementares (Responsável, Telefone, Observações) vinculados ao aluno sem alterar o schema
       if (guardianName || guardianPhone || guardianEmail || phone || notes) {
         const fichaCadastro = JSON.stringify({
           guardianName: guardianName?.trim() || "",
@@ -124,6 +123,7 @@ export const StudentController = {
 
       const students = await prisma.student.findMany({
         where: filtroEscola,
+        orderBy: { name: 'asc' },
         include: {
           class: true,
           attendances: true
@@ -158,7 +158,7 @@ export const StudentController = {
     }
   },
 
-  // 3. Buscar perfil completo de um aluno (Inclui ficha de responsável e foto biométrica)
+  // 3. Buscar perfil completo de um aluno
   async show(req: Request, res: Response) {
     const id = req.params.id as string;
 
@@ -188,7 +188,6 @@ export const StudentController = {
         return res.status(403).json({ error: "Acesso negado. Este aluno não pertence à sua escola." });
       }
 
-      // Extrai ficha cadastral do responsável (se existir) e filtra dos incidentes visíveis
       let dadosFicha: any = {};
       const fichaReg = student.incidents.find(i => i.type === 'FICHA_CADASTRO');
       if (fichaReg?.description) {
@@ -217,7 +216,158 @@ export const StudentController = {
     }
   },
 
-  // 4. Cadastrar/Atualizar foto biométrica
+  // 4. Atualizar dados do aluno e ficha do responsável
+  async update(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      const alunoAtual = await prisma.student.findUnique({
+        where: { id },
+        include: { incidents: { where: { type: 'FICHA_CADASTRO' } } }
+      });
+
+      if (!alunoAtual) {
+        return res.status(404).json({ error: "Aluno não encontrado." });
+      }
+
+      if (user.role !== 'ADMIN' && alunoAtual.escolaId !== user.escolaId) {
+        return res.status(403).json({ error: "Acesso negado a este aluno." });
+      }
+
+      const {
+        registration,
+        name,
+        email,
+        birthDate,
+        guardianName,
+        guardianPhone,
+        guardianRelationship,
+        guardianEmail,
+        phone,
+        notes
+      } = req.body;
+
+      const classId = req.body.classId || req.body.turmaId || req.body.turma;
+
+      let parsedDate = alunoAtual.birthDate;
+      if (birthDate !== undefined) {
+        if (!birthDate) {
+          parsedDate = null;
+        } else {
+          const dateObj = new Date(birthDate);
+          if (!isNaN(dateObj.getTime())) parsedDate = dateObj;
+        }
+      }
+
+      const updatedStudent = await prisma.student.update({
+        where: { id },
+        data: {
+          ...(registration !== undefined && { registration: String(registration).trim() }),
+          ...(name !== undefined && { name: String(name).trim() }),
+          ...(email !== undefined && { email: String(email).trim() }),
+          ...(classId !== undefined && { classId: String(classId) }),
+          birthDate: parsedDate
+        },
+        include: { class: true }
+      });
+
+      const temCamposFicha = [
+        guardianName,
+        guardianPhone,
+        guardianRelationship,
+        guardianEmail,
+        phone,
+        notes
+      ].some((v) => v !== undefined);
+
+      if (temCamposFicha) {
+        let fichaAnterior: any = {};
+        const regFicha = alunoAtual.incidents[0];
+        if (regFicha?.description) {
+          try {
+            fichaAnterior = JSON.parse(regFicha.description);
+          } catch {
+            fichaAnterior = {};
+          }
+        }
+
+        const novaFicha = JSON.stringify({
+          guardianName: guardianName !== undefined ? String(guardianName).trim() : (fichaAnterior.guardianName || ""),
+          guardianPhone: guardianPhone !== undefined ? String(guardianPhone).trim() : (fichaAnterior.guardianPhone || ""),
+          guardianRelationship: guardianRelationship !== undefined ? String(guardianRelationship).trim() : (fichaAnterior.guardianRelationship || ""),
+          guardianEmail: guardianEmail !== undefined ? String(guardianEmail).trim() : (fichaAnterior.guardianEmail || ""),
+          phone: phone !== undefined ? String(phone).trim() : (fichaAnterior.phone || ""),
+          notes: notes !== undefined ? String(notes).trim() : (fichaAnterior.notes || "")
+        });
+
+        if (regFicha) {
+          await prisma.incident.update({
+            where: { id: regFicha.id },
+            data: { description: novaFicha }
+          });
+        } else {
+          await prisma.incident.create({
+            data: {
+              type: 'FICHA_CADASTRO',
+              description: novaFicha,
+              studentId: id,
+              escolaId: alunoAtual.escolaId
+            }
+          });
+        }
+      }
+
+      return res.json(updatedStudent);
+    } catch (error: any) {
+      console.error("Erro ao atualizar aluno:", error);
+      if (error.code === 'P2002') {
+        const campo = error.meta?.target?.[0] || error.meta?.target || "campo";
+        return res.status(400).json({ error: `Já existe outro aluno com este(a) ${campo}.` });
+      }
+      return res.status(500).json({ error: "Erro ao atualizar aluno." });
+    }
+  },
+
+  // 5. Excluir Aluno
+  async delete(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      const aluno = await prisma.student.findUnique({ where: { id } });
+      if (!aluno) {
+        return res.status(404).json({ error: "Aluno não encontrado." });
+      }
+
+      if (user.role !== 'ADMIN' && aluno.escolaId !== user.escolaId) {
+        return res.status(403).json({ error: "Acesso negado a este aluno." });
+      }
+
+      await prisma.$transaction([
+        prisma.attendance.deleteMany({ where: { studentId: id } }),
+        prisma.incident.deleteMany({ where: { studentId: id } }),
+        prisma.alert.deleteMany({ where: { studentId: id } }),
+        prisma.grade.deleteMany({ where: { studentId: id } }),
+        prisma.student.delete({ where: { id } })
+      ]);
+
+      return res.json({ message: "Aluno excluído com sucesso!" });
+    } catch (error) {
+      console.error("Erro ao excluir aluno:", error);
+      return res.status(500).json({ error: "Erro ao excluir aluno." });
+    }
+  },
+
+  // 6. Cadastrar/Atualizar foto biométrica
   async uploadBiometry(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
@@ -255,7 +405,7 @@ export const StudentController = {
     }
   },
 
-  // 5. Histórico detalhado para o Modal
+  // 7. Histórico detalhado para o Modal
   async attendanceHistory(req: Request, res: Response) {
     try {
       const id = req.params.id as string;

@@ -1,21 +1,40 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 
+function normalizarTexto(valor: unknown): string {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[ºª°]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function parseAnoLetivo(valor: unknown, fallback: number): number {
+  if (valor === undefined || valor === null || String(valor).trim() === '') {
+    return fallback;
+  }
+  const num = Number(valor);
+  return Number.isFinite(num) ? Math.trunc(num) : fallback;
+}
+
 export const ClassController = {
+  // 1. Criar Turma (com bloqueio de duplicidade)
   async create(req: Request, res: Response) {
     try {
       const { name, year, course, shift } = req.body;
-      
-      // 1. Pega os dados diretamente do middleware (sem precisar consultar o banco!)
-      const user = req.user; 
-      
+      const user = req.user;
+
       if (!user) {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
-      // 2. Define o escolaId com base no perfil (Admin pode enviar no body, Gestor pega do token)
-      let escolaId = req.body.escolaId; 
-      
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ error: "O nome da turma é obrigatório." });
+      }
+
+      let escolaId = req.body.escolaId;
       if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
           return res.status(403).json({ error: "Gestor sem escola vinculada." });
@@ -23,16 +42,40 @@ export const ClassController = {
         escolaId = user.escolaId;
       }
 
-      const newClass = await prisma.class.create({ 
-        data: { 
-          name, 
-          year, 
-          course, 
-          shift,
-          escolaId // Vincula a turma à escola de forma blindada
-        } 
+      const anoLetivo = parseAnoLetivo(year, new Date().getFullYear());
+
+      // Verifica duplicidade na mesma escola (ignorando acentos, º/ª, maiúsculas e espaços)
+      const turmasEscola = await prisma.class.findMany({
+        where: escolaId ? { escolaId } : {},
+        select: { id: true, name: true, shift: true, year: true }
       });
-      
+
+      const nomeNorm = normalizarTexto(name);
+      const turnoNorm = normalizarTexto(shift);
+
+      const duplicada = turmasEscola.find((t) => {
+        const mesmoNome = normalizarTexto(t.name) === nomeNorm;
+        const mesmoTurno = !turnoNorm || !normalizarTexto(t.shift) || normalizarTexto(t.shift) === turnoNorm;
+        const mesmoAno = !t.year || t.year === anoLetivo;
+        return mesmoNome && mesmoTurno && mesmoAno;
+      });
+
+      if (duplicada) {
+        return res.status(409).json({
+          error: `Já existe uma turma cadastrada como "${duplicada.name}"${duplicada.shift ? ` (${duplicada.shift})` : ''}.`
+        });
+      }
+
+      const newClass = await prisma.class.create({
+        data: {
+          name: String(name).trim(),
+          year: anoLetivo,
+          course: course ? String(course).trim() : "",
+          shift: shift ? String(shift).trim() : "",
+          escolaId
+        }
+      });
+
       return res.status(201).json(newClass);
     } catch (error) {
       console.error("Erro ao criar turma:", error);
@@ -40,6 +83,7 @@ export const ClassController = {
     }
   },
 
+  // 2. Listar Turmas (com cálculos de frequência e risco)
   async index(req: Request, res: Response) {
     try {
       const user = req.user;
@@ -50,16 +94,16 @@ export const ClassController = {
 
       let filtroEscola = {};
 
-      // 3. Regra Multi-Tenant: O Prisma filtra automaticamente pela escola do gestor logado
       if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
-          return res.json([]); 
+          return res.json([]);
         }
         filtroEscola = { escolaId: user.escolaId };
       }
 
       const classes = await prisma.class.findMany({
-        where: filtroEscola, 
+        where: filtroEscola,
+        orderBy: { name: 'asc' },
         include: {
           _count: {
             select: { students: true }
@@ -73,7 +117,6 @@ export const ClassController = {
         }
       });
 
-      // 4. Mapeamento de cálculos mantido intacto (excelente lógica, parabéns!)
       const formattedClasses = classes.map(c => {
         let highRisk = 0;
         let mediumRisk = 0;
@@ -94,8 +137,8 @@ export const ClassController = {
           }
         });
 
-        const attendanceRate = totalAttendances > 0 
-          ? Math.round((totalPresent / totalAttendances) * 100) 
+        const attendanceRate = totalAttendances > 0
+          ? Math.round((totalPresent / totalAttendances) * 100)
           : 100;
 
         return {
@@ -115,6 +158,113 @@ export const ClassController = {
     } catch (error) {
       console.error("Erro ao buscar turmas:", error);
       return res.status(500).json({ error: "Erro ao buscar as turmas." });
+    }
+  },
+
+  // 3. Atualizar Turma
+  async update(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const { name, year, course, shift } = req.body;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      const turmaAtual = await prisma.class.findUnique({ where: { id } });
+      if (!turmaAtual) {
+        return res.status(404).json({ error: "Turma não encontrada." });
+      }
+
+      if (user.role !== 'ADMIN' && turmaAtual.escolaId !== user.escolaId) {
+        return res.status(403).json({ error: "Acesso negado a esta turma." });
+      }
+
+      const novoNome = name !== undefined ? String(name).trim() : turmaAtual.name;
+      const novoTurno = shift !== undefined ? String(shift).trim() : turmaAtual.shift;
+      const novoAno = parseAnoLetivo(year, turmaAtual.year);
+      const novoCurso = course !== undefined ? String(course).trim() : turmaAtual.course;
+
+      if (!novoNome) {
+        return res.status(400).json({ error: "O nome da turma não pode ficar vazio." });
+      }
+
+      // Verifica se a edição colide com outra turma existente da escola
+      const outrasTurmas = await prisma.class.findMany({
+        where: {
+          escolaId: turmaAtual.escolaId,
+          NOT: { id }
+        },
+        select: { id: true, name: true, shift: true, year: true }
+      });
+
+      const duplicada = outrasTurmas.find((t) => {
+        const mesmoNome = normalizarTexto(t.name) === normalizarTexto(novoNome);
+        const mesmoTurno = !normalizarTexto(novoTurno) || !normalizarTexto(t.shift) || normalizarTexto(t.shift) === normalizarTexto(novoTurno);
+        const mesmoAno = !t.year || t.year === novoAno;
+        return mesmoNome && mesmoTurno && mesmoAno;
+      });
+
+      if (duplicada) {
+        return res.status(409).json({
+          error: `Já existe outra turma cadastrada como "${duplicada.name}"${duplicada.shift ? ` (${duplicada.shift})` : ''}.`
+        });
+      }
+
+      const updatedClass = await prisma.class.update({
+        where: { id },
+        data: {
+          name: novoNome,
+          year: novoAno,
+          course: novoCurso,
+          shift: novoTurno
+        }
+      });
+
+      return res.json(updatedClass);
+    } catch (error) {
+      console.error("Erro ao atualizar turma:", error);
+      return res.status(500).json({ error: "Erro ao atualizar turma." });
+    }
+  },
+
+  // 4. Excluir Turma
+  async delete(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
+
+      const turma = await prisma.class.findUnique({
+        where: { id },
+        include: { _count: { select: { students: true } } }
+      });
+
+      if (!turma) {
+        return res.status(404).json({ error: "Turma não encontrada." });
+      }
+
+      if (user.role !== 'ADMIN' && turma.escolaId !== user.escolaId) {
+        return res.status(403).json({ error: "Acesso negado a esta turma." });
+      }
+
+      if (turma._count.students > 0) {
+        return res.status(400).json({
+          error: `Não é possível excluir esta turma pois ela possui ${turma._count.students} aluno(s) matriculado(s). Transfira ou remova os alunos primeiro.`
+        });
+      }
+
+      await prisma.attendance.deleteMany({ where: { classId: id } });
+      await prisma.class.delete({ where: { id } });
+
+      return res.json({ message: "Turma excluída com sucesso!" });
+    } catch (error) {
+      console.error("Erro ao excluir turma:", error);
+      return res.status(500).json({ error: "Erro ao excluir turma." });
     }
   }
 };

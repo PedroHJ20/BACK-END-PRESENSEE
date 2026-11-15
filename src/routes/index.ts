@@ -76,11 +76,15 @@ routes.post('/api/auditoria', AuditoriaController.create);
 // Turmas
 routes.post('/api/classes', ClassController.create);
 routes.get('/api/classes', ClassController.index);
+routes.patch('/api/classes/:id', ClassController.update);
+routes.delete('/api/classes/:id', ClassController.delete);
 
 // Alunos
 routes.post('/api/students', StudentController.create);
 routes.get('/api/students', StudentController.index);
 routes.get('/api/students/:id', StudentController.show);
+routes.patch('/api/students/:id', StudentController.update);
+routes.delete('/api/students/:id', StudentController.delete);
 routes.patch('/api/students/:id/biometry', (req, res, next) => {
   upload.single('photo')(req, res, (err) => {
     if (err) {
