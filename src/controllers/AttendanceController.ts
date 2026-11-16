@@ -8,6 +8,16 @@ interface ConfigHorarioAula {
   marcarFaltaAposLimite: boolean;
 }
 
+function normalizarTexto(valor: unknown): string {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[ºª°]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 function obterHoraMinutosRecife(dataObj = new Date()): string {
   return dataObj.toLocaleTimeString('pt-BR', {
     timeZone: 'America/Recife',
@@ -20,6 +30,41 @@ function obterHoraMinutosRecife(dataObj = new Date()): string {
 function horarioPassouDoLimite(horaAtualHHMM: string, horaLimiteHHMM: string): boolean {
   if (!horaLimiteHHMM || !/^\d{2}:\d{2}$/.test(horaLimiteHHMM)) return false;
   return horaAtualHHMM > horaLimiteHHMM;
+}
+
+async function verificarEventoAbonaAlunoNoDia(
+  escolaId: string | null,
+  nomeTurmaAluno: string | undefined,
+  dataLocalStr: string
+): Promise<boolean> {
+  if (!escolaId) return false;
+
+  const eventosAbono = await prisma.event.findMany({
+    where: {
+      escolaId,
+      excusesAbsence: true,
+    },
+  });
+
+  const turmaNorm = normalizarTexto(nomeTurmaAluno);
+
+  return eventosAbono.some((ev) => {
+    const inicioStr = ev.startDate.toISOString().split('T')[0] ?? '';
+    const fimStr = ev.endDate.toISOString().split('T')[0] ?? '';
+    if (!inicioStr || !fimStr || dataLocalStr < inicioStr || dataLocalStr > fimStr) return false;
+
+    const publicoNorm = normalizarTexto(ev.audience);
+    if (!publicoNorm || publicoNorm === 'toda a escola' || publicoNorm === 'todas as turmas') {
+      return true;
+    }
+
+    return (
+      Boolean(turmaNorm) &&
+      (turmaNorm === publicoNorm ||
+        publicoNorm.includes(turmaNorm) ||
+        turmaNorm.includes(publicoNorm))
+    );
+  });
 }
 
 async function buscarConfigHorario(escolaId: string | null, classId: string): Promise<ConfigHorarioAula | null> {
@@ -179,7 +224,7 @@ export const AttendanceController = {
     }
   },
 
-  // 1. Registrar chamada automaticamente (via câmera) respeitando o horário limite de entrada
+  // 1. Registrar chamada automaticamente (via câmera) respeitando o horário limite e eventos com abono
   async create(req: Request, res: Response) {
     try {
       const { studentId, classId, status } = req.body;
@@ -195,6 +240,7 @@ export const AttendanceController = {
 
       const student = await prisma.student.findUnique({
         where: { id: String(studentId) },
+        include: { class: true },
       });
 
       if (!student) {
@@ -214,7 +260,6 @@ export const AttendanceController = {
       const inicioDia = new Date(`${dataLocalStr}T00:00:00.000-03:00`);
       const fimDia = new Date(`${dataLocalStr}T23:59:59.999-03:00`);
 
-      // Verifica se já existe registro de frequência para este aluno hoje
       const registroExistente = await prisma.attendance.findFirst({
         where: {
           studentId: student.id,
@@ -226,20 +271,42 @@ export const AttendanceController = {
       });
 
       if (registroExistente) {
+        const configHorario = await buscarConfigHorario(student.escolaId, turmaFinalId);
+        const passouLimite =
+          configHorario?.marcarFaltaAposLimite &&
+          horarioPassouDoLimite(horaAtualHHMM, configHorario.horaLimite);
+
+        if (registroExistente.status === 'EXCUSED' && !passouLimite && (!status || status === 'PRESENT')) {
+          const atualizado = await prisma.attendance.update({
+            where: { id: registroExistente.id },
+            data: { status: 'PRESENT', date: agora },
+          });
+          return res.status(200).json({
+            message: "Presença registrada com sucesso pela câmera!",
+            foraDoHorario: false,
+            attendance: atualizado,
+          });
+        }
+
         return res.status(200).json({
           message:
             registroExistente.status === 'ABSENT'
               ? "Falta já registrada anteriormente hoje (fora do horário limite)."
               : registroExistente.status === 'EXCUSED'
-              ? "Aluno possui falta justificada por atestado hoje."
+              ? "Aluno possui falta justificada por evento ou atestado hoje."
               : "Frequência já registrada anteriormente hoje!",
           alreadyRegistered: true,
           attendance: registroExistente,
         });
       }
 
-      // Verifica a regra de horário limite definida pelo monitor
       const configHorario = await buscarConfigHorario(student.escolaId, turmaFinalId);
+      const diaAbonadoPorEvento = await verificarEventoAbonaAlunoNoDia(
+        student.escolaId,
+        student.class?.name,
+        dataLocalStr
+      );
+
       let statusFinal: 'PRESENT' | 'ABSENT' | 'EXCUSED' = status || 'PRESENT';
       let foraDoHorario = false;
 
@@ -248,8 +315,12 @@ export const AttendanceController = {
         configHorario?.marcarFaltaAposLimite &&
         horarioPassouDoLimite(horaAtualHHMM, configHorario.horaLimite)
       ) {
-        statusFinal = 'ABSENT';
-        foraDoHorario = true;
+        if (diaAbonadoPorEvento) {
+          statusFinal = 'EXCUSED';
+        } else {
+          statusFinal = 'ABSENT';
+          foraDoHorario = true;
+        }
       }
 
       const attendance = await prisma.attendance.create({
@@ -264,6 +335,8 @@ export const AttendanceController = {
       return res.status(201).json({
         message: foraDoHorario
           ? `Entrada às ${horaAtualHHMM} após o limite (${configHorario?.horaLimite}). Registrado como FALTA.`
+          : statusFinal === 'EXCUSED'
+          ? "Dia abonado por evento escolar (Justificada)."
           : "Presença registrada com sucesso pela câmera!",
         foraDoHorario,
         horaLimite: configHorario?.horaLimite || null,
@@ -275,7 +348,7 @@ export const AttendanceController = {
     }
   },
 
-  // 1.1 Encerrar chamada do dia/turma: marca ABSENT para quem não passou no totem nem tem atestado
+  // 1.1 Encerrar chamada do dia/turma: aplica EXCUSED se houver evento com abono no dia, ou ABSENT caso contrário
   async closeDailyAttendance(req: Request, res: Response) {
     try {
       const user = req.user;
@@ -300,7 +373,7 @@ export const AttendanceController = {
 
       const alunos = await prisma.student.findMany({
         where: filtroAlunos,
-        select: { id: true, classId: true },
+        include: { class: true },
       });
 
       const chamadasHoje = await prisma.attendance.findMany({
@@ -312,23 +385,57 @@ export const AttendanceController = {
       });
 
       const idsJaRegistrados = new Set(chamadasHoje.map((c) => c.studentId));
-      const ausentes = alunos.filter((a) => !idsJaRegistrados.has(a.id));
+      const semRegistro = alunos.filter((a) => !idsJaRegistrados.has(a.id));
 
-      if (ausentes.length > 0) {
+      let faltasAplicadas = 0;
+      let abonadasPorEvento = 0;
+
+      if (semRegistro.length > 0) {
+        const registrosParaCriar: Array<{
+          studentId: string;
+          classId: string;
+          status: 'ABSENT' | 'EXCUSED';
+          date: Date;
+        }> = [];
+
+        for (const aluno of semRegistro) {
+          const abonado = await verificarEventoAbonaAlunoNoDia(
+            aluno.escolaId,
+            aluno.class?.name,
+            dataLocalStr
+          );
+          if (abonado) {
+            abonadasPorEvento++;
+            registrosParaCriar.push({
+              studentId: aluno.id,
+              classId: aluno.classId,
+              status: 'EXCUSED',
+              date: agora,
+            });
+          } else {
+            faltasAplicadas++;
+            registrosParaCriar.push({
+              studentId: aluno.id,
+              classId: aluno.classId,
+              status: 'ABSENT',
+              date: agora,
+            });
+          }
+        }
+
         await prisma.attendance.createMany({
-          data: ausentes.map((aluno) => ({
-            studentId: aluno.id,
-            classId: aluno.classId,
-            status: 'ABSENT',
-            date: agora,
-          })),
+          data: registrosParaCriar,
           skipDuplicates: true,
         });
       }
 
       return res.json({
-        message: `Chamada encerrada. ${ausentes.length} falta(s) aplicada(s) aos estudantes ausentes.`,
-        faltasAplicadas: ausentes.length,
+        message:
+          abonadasPorEvento > 0
+            ? `Chamada encerrada: ${faltasAplicadas} falta(s) aplicada(s) e ${abonadasPorEvento} abonada(s) por evento escolar.`
+            : `Chamada encerrada. ${faltasAplicadas} falta(s) aplicada(s) aos estudantes ausentes.`,
+        faltasAplicadas,
+        abonadasPorEvento,
       });
     } catch (error) {
       console.error("Erro ao encerrar chamada do dia:", error);
