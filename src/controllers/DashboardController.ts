@@ -6,6 +6,10 @@ const NOMES_MESES = [
   'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
 ];
 
+function isPresenteOuAbonado(status: string): boolean {
+  return status === 'PRESENT' || status === 'EXCUSED';
+}
+
 export class DashboardController {
   static async getSummary(req: Request, res: Response) {
     try {
@@ -15,7 +19,6 @@ export class DashboardController {
         return res.status(401).json({ error: "Usuário não autenticado." });
       }
 
-      // Lê o filtro de período enviado pelo front-end (padrão: 6 meses)
       const mesesParam = Number(req.query.meses);
       const qtdMeses = [3, 6, 12].includes(mesesParam) ? mesesParam : 6;
 
@@ -43,7 +46,6 @@ export class DashboardController {
         filtroEscola = { escolaId: user.escolaId };
       }
 
-      // Busca paralela para reduzir latência com o banco na nuvem
       const [students, classes] = await Promise.all([
         prisma.student.findMany({
           where: filtroEscola,
@@ -71,7 +73,6 @@ export class DashboardController {
       let totalPresent = 0;
       let totalAttendances = 0;
 
-      // Acumuladores reais por dia da semana (1 = Seg ... 5 = Sex)
       const diasSemanaStats: Record<number, { present: number; total: number }> = {
         1: { present: 0, total: 0 },
         2: { present: 0, total: 0 },
@@ -84,7 +85,7 @@ export class DashboardController {
 
       students.forEach((student) => {
         const total = student.attendances.length;
-        const present = student.attendances.filter((a) => a.status === 'PRESENT').length;
+        const present = student.attendances.filter((a) => isPresenteOuAbonado(a.status)).length;
         totalAttendances += total;
         totalPresent += present;
 
@@ -95,24 +96,23 @@ export class DashboardController {
           const diaSemana = dataAtt.getDay(); // 0 = Dom, 1 = Seg ... 5 = Sex, 6 = Sab
           if (diasSemanaStats[diaSemana]) {
             diasSemanaStats[diaSemana].total++;
-            if (att.status === 'PRESENT') {
+            if (isPresenteOuAbonado(att.status)) {
               diasSemanaStats[diaSemana].present++;
             }
           }
         });
 
-        const freq = total > 0 ? (present / total) * 100 : 100;
+        const freq = total > 0 ? Math.round((present / total) * 100) : 100;
 
-        if (freq < 70 || student.alerts.length >= 2) {
+        if (freq < 75 || student.alerts.length >= 2) {
           highRisk++;
-        } else if (freq < 85 || student.alerts.length === 1) {
+        } else if (freq < 90 || student.alerts.length === 1) {
           mediumRisk++;
         } else {
           lowRisk++;
         }
       });
 
-      // Se não houver alunos ou nenhuma chamada registrada, frequência é 0%
       const overallFrequency = (temAlunos && totalAttendances > 0)
         ? Math.round((totalPresent / totalAttendances) * 100)
         : 0;
@@ -123,7 +123,7 @@ export class DashboardController {
 
         c.students.forEach((s) => {
           classTotal += s.attendances.length;
-          classPresent += s.attendances.filter((a) => a.status === 'PRESENT').length;
+          classPresent += s.attendances.filter((a) => isPresenteOuAbonado(a.status)).length;
         });
 
         const frequency = (c.students.length > 0 && classTotal > 0)
@@ -136,7 +136,6 @@ export class DashboardController {
         };
       });
 
-      // Monta série histórica dinâmica para 3, 6 ou 12 meses
       const hoje = new Date();
       const evolucaoRisco = [];
 
@@ -162,11 +161,10 @@ export class DashboardController {
         let taxaFreqMes = 0;
 
         if (presencasDoMes.length > 0) {
-          const presentesMes = presencasDoMes.filter((p) => p.status === 'PRESENT').length;
+          const presentesMes = presencasDoMes.filter((p) => isPresenteOuAbonado(p.status)).length;
           taxaFreqMes = Math.round((presentesMes / presencasDoMes.length) * 100);
           taxaRiscoMes = Math.max(0, 100 - taxaFreqMes);
         } else if (i === 0) {
-          // Mês atual: reflete o risco atual calculado dos alunos
           taxaRiscoMes = Math.round((highRisk / students.length) * 100);
           taxaFreqMes = overallFrequency;
         }
@@ -178,7 +176,6 @@ export class DashboardController {
         });
       }
 
-      // Frequência por dia da semana (0% garantido se não houver alunos ou registros no dia)
       const frequenciaPorSemana = [
         { dia: "Seg", key: 1 },
         { dia: "Ter", key: 2 },

@@ -44,7 +44,6 @@ export const ClassController = {
 
       const anoLetivo = parseAnoLetivo(year, new Date().getFullYear());
 
-      // Verifica duplicidade na mesma escola (ignorando acentos, º/ª, maiúsculas e espaços)
       const turmasEscola = await prisma.class.findMany({
         where: escolaId ? { escolaId } : {},
         select: { id: true, name: true, shift: true, year: true }
@@ -83,7 +82,7 @@ export const ClassController = {
     }
   },
 
-  // 2. Listar Turmas (com cálculos de frequência e risco)
+  // 2. Listar Turmas (com cálculos de frequência considerando PRESENT + EXCUSED e risco alinhado)
   async index(req: Request, res: Response) {
     try {
       const user = req.user;
@@ -125,14 +124,16 @@ export const ClassController = {
 
         c.students.forEach(student => {
           const total = student.attendances.length;
-          const present = student.attendances.filter(a => a.status === 'PRESENT').length;
+          const present = student.attendances.filter(
+            a => a.status === 'PRESENT' || a.status === 'EXCUSED'
+          ).length;
           totalAttendances += total;
           totalPresent += present;
 
-          const freq = total > 0 ? (present / total) * 100 : 100;
-          if (freq < 70 || student.alerts.length >= 2) {
+          const freq = total > 0 ? Math.round((present / total) * 100) : 100;
+          if (freq < 75 || student.alerts.length >= 2) {
             highRisk++;
-          } else if (freq < 85 || student.alerts.length === 1) {
+          } else if (freq < 90 || student.alerts.length === 1) {
             mediumRisk++;
           }
         });
@@ -190,7 +191,6 @@ export const ClassController = {
         return res.status(400).json({ error: "O nome da turma não pode ficar vazio." });
       }
 
-      // Verifica se a edição colide com outra turma existente da escola
       const outrasTurmas = await prisma.class.findMany({
         where: {
           escolaId: turmaAtual.escolaId,
