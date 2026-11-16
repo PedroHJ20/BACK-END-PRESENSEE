@@ -1,6 +1,30 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 
+function listarDiasUteisPeriodo(inicioStr: string, fimStr: string): string[] {
+  const datas: string[] = [];
+  const atual = new Date(`${inicioStr}T12:00:00-03:00`);
+  const fim = new Date(`${fimStr}T12:00:00-03:00`);
+
+  if (isNaN(atual.getTime()) || isNaN(fim.getTime()) || atual > fim) {
+    return datas;
+  }
+
+  let contador = 0;
+  while (atual <= fim && contador < 366) {
+    const diaSemana = atual.getDay(); // 0 = Dom, 6 = Sáb
+    if (diaSemana !== 0 && diaSemana !== 6) {
+      const yyyy = atual.getFullYear();
+      const mm = String(atual.getMonth() + 1).padStart(2, '0');
+      const dd = String(atual.getDate()).padStart(2, '0');
+      datas.push(`${yyyy}-${mm}-${dd}`);
+    }
+    atual.setDate(atual.getDate() + 1);
+    contador++;
+  }
+  return datas;
+}
+
 export class IncidentController {
   static async index(req: Request, res: Response) {
     try {
@@ -11,8 +35,9 @@ export class IncidentController {
       }
 
       const studentId = req.query.studentId as string | undefined;
-
-      let baseFilter: any = {};
+      const baseFilter: any = {
+        type: { notIn: ['FICHA_CADASTRO', 'CONFIG_HORARIO_AULA'] }
+      };
 
       if (user.role !== 'ADMIN') {
         if (!user.escolaId) {
@@ -102,6 +127,7 @@ export class IncidentController {
     }
   }
 
+  // Registra justificativa médica E abona as faltas (EXCUSED) na Frequência Geral no período
   static async uploadCertificate(req: Request, res: Response) {
     try {
       const user = req.user;
@@ -145,7 +171,7 @@ export class IncidentController {
           type: 'Justificativa de Falta',
           studentId: String(studentId),
           escolaId,
-          date: new Date(`${inicio}T12:00:00`),
+          date: new Date(`${inicio}T12:00:00-03:00`),
           description: `Período: ${periodoTexto}${obsTexto} | [Atestado: ${urlCloudinary}]`
         },
         include: {
@@ -153,9 +179,43 @@ export class IncidentController {
         }
       });
 
+      // Sincroniza diretamente com a tabela chamadas (Attendance) -> status EXCUSED
+      const diasUteis = listarDiasUteisPeriodo(String(inicio), String(fim));
+      for (const diaStr of diasUteis) {
+        const inicioDia = new Date(`${diaStr}T00:00:00.000-03:00`);
+        const fimDia = new Date(`${diaStr}T23:59:59.999-03:00`);
+
+        const chamadaExistente = await prisma.attendance.findFirst({
+          where: {
+            studentId: student.id,
+            date: { gte: inicioDia, lte: fimDia }
+          }
+        });
+
+        if (chamadaExistente) {
+          // Atualiza ABSENT para EXCUSED (preserva PRESENT caso já tenha ido à aula)
+          if (chamadaExistente.status !== 'PRESENT') {
+            await prisma.attendance.update({
+              where: { id: chamadaExistente.id },
+              data: { status: 'EXCUSED' }
+            });
+          }
+        } else {
+          await prisma.attendance.create({
+            data: {
+              studentId: student.id,
+              classId: student.classId,
+              status: 'EXCUSED',
+              date: new Date(`${diaStr}T12:00:00.000-03:00`)
+            }
+          });
+        }
+      }
+
       return res.status(201).json({
         incident,
-        certificateUrl: urlCloudinary
+        certificateUrl: urlCloudinary,
+        diasJustificados: diasUteis.length
       });
     } catch (error) {
       console.error("Erro ao registrar justificativa médica:", error);
@@ -186,7 +246,6 @@ export class IncidentController {
       }
 
       const updateData: any = {};
-
       let descAtual = description !== undefined ? description : texto;
 
       const novaPrioridade = priority || prioridade;

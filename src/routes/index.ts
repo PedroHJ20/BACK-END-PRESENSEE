@@ -101,9 +101,12 @@ routes.patch('/api/students/:id/biometry', (req, res, next) => {
 }, StudentController.uploadBiometry);
 routes.get('/api/students/:id/attendance-history', StudentController.attendanceHistory);
 
-// Frequência e Alertas
+// Frequência, Horário Limite e Alertas
 routes.get('/api/attendances', AttendanceController.index);
 routes.post('/api/attendances', AttendanceController.create);
+routes.get('/api/attendances/schedule-config', AttendanceController.getScheduleConfig);
+routes.post('/api/attendances/schedule-config', AttendanceController.saveScheduleConfig);
+routes.post('/api/attendances/close-daily', AttendanceController.closeDailyAttendance);
 routes.get('/api/alerts', AttendanceController.listAlerts);
 
 // Ocorrências (Diário do Monitor, Intervenções e Atestados)
