@@ -32,10 +32,24 @@ model User {
   escolaId String?
   escola   Escola? @relation(fields: [escolaId], references: [id], onDelete: Cascade)
 
+  notificacoesLidas NotificacaoLida[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("usuarios")
+}
+
+// Persistência de Notificações Lidas por Usuário
+model NotificacaoLida {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chaveLeitura String
+  lidaEm       DateTime @default(now())
+
+  @@unique([userId, chaveLeitura])
+  @@map("notificacoes_lidas")
 }
 
 // Turmas

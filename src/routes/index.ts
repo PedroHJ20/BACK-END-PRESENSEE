@@ -10,6 +10,7 @@ import { SchoolController } from '../controllers/SchoolController.js';
 import { UserController } from '../controllers/UserController.js';
 import { ChamadoController } from '../controllers/ChamadoController.js';
 import { ComunicadoController } from '../controllers/ComunicadoController.js';
+import { NotificacaoController } from '../controllers/NotificacaoController.js';
 import { HealthController } from '../controllers/HealthController.js';
 import { AuditoriaController } from '../controllers/AuditoriaController.js';
 import { upload, uploadAtestado } from '../middlewares/upload.js';
@@ -65,6 +66,10 @@ routes.get('/api/comunicados', ComunicadoController.index);
 routes.post('/api/comunicados', ComunicadoController.create);
 routes.patch('/api/comunicados/:id', ComunicadoController.update);
 routes.delete('/api/comunicados/:id', ComunicadoController.delete);
+
+// Persistência de Notificações Lidas
+routes.get('/api/notificacoes-lidas', NotificacaoController.listarLidas);
+routes.post('/api/notificacoes-lidas', NotificacaoController.marcarComoLidas);
 
 // Saúde do Sistema (Admin)
 routes.get('/api/health', HealthController.check);
