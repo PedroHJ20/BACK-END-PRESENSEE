@@ -13,6 +13,7 @@ import { ComunicadoController } from '../controllers/ComunicadoController.js';
 import { NotificacaoController } from '../controllers/NotificacaoController.js';
 import { HealthController } from '../controllers/HealthController.js';
 import { AuditoriaController } from '../controllers/AuditoriaController.js';
+import { ChatController } from '../controllers/ChatController.js';
 import { upload, uploadAtestado } from '../middlewares/upload.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -30,6 +31,9 @@ routes.post('/api/change-initial-password', AuthController.changeInitialPassword
 routes.use(authMiddleware);
 
 // Rotas Protegidas
+
+// Assistente de IA (Chat e Gráficos Personalizados)
+routes.post('/api/chat', ChatController.ask);
 
 // Dashboard
 routes.get('/api/dashboard', DashboardController.getSummary);
