@@ -3,13 +3,11 @@ import { prisma } from '../lib/prisma.js';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
-const MODELOS_PREFERIDOS = [
+const MODELOS_CHAT_GROQ = [
   'llama-3.3-70b-versatile',
-  'llama-3.1-70b-versatile',
+  'llama-3.1-8b-instant',
   'meta-llama/llama-4-scout-17b-16e-instruct',
   'qwen/qwen3-32b',
-  'llama-3.1-8b-instant',
-  'gemma2-9b-it',
 ];
 
 function isPresenteOuAbonado(status: string): boolean {
@@ -26,33 +24,17 @@ function extrairFichaCadastro(incidents: Array<{ type: string; description: stri
   }
 }
 
-async function obterModelosGroqDisponiveis(apiKey: string): Promise<string[]> {
-  try {
-    const resp = await fetch(`${GROQ_BASE_URL}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!resp.ok) return MODELOS_PREFERIDOS;
-
-    const json = (await resp.json()) as { data?: Array<{ id: string }> };
-    const ativos = (json.data || [])
-      .map((m) => m.id)
-      .filter(
-        (id) =>
-          !id.includes('whisper') &&
-          !id.includes('guard') &&
-          !id.includes('tts') &&
-          !id.includes('embed')
-      );
-
-    if (ativos.length === 0) return MODELOS_PREFERIDOS;
-
-    return [
-      ...MODELOS_PREFERIDOS.filter((m) => ativos.includes(m)),
-      ...ativos.filter((m) => !MODELOS_PREFERIDOS.includes(m)),
-    ];
-  } catch {
-    return MODELOS_PREFERIDOS;
+function calcularIdade(birthDate: Date | null | undefined): number | null {
+  if (!birthDate) return null;
+  const hoje = new Date();
+  const nasc = new Date(birthDate);
+  if (Number.isNaN(nasc.getTime())) return null;
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const mesDiff = hoje.getMonth() - nasc.getMonth();
+  if (mesDiff < 0 || (mesDiff === 0 && hoje.getDate() < nasc.getDate())) {
+    idade--;
   }
+  return idade >= 0 ? idade : null;
 }
 
 export class ChatController {
@@ -193,7 +175,6 @@ export class ChatController {
           : Promise.resolve([]),
       ]);
 
-      // Agrupa registros por studentId (tipados explicitamente como any[])
       const chamadasPorAluno = new Map<string, any[]>();
       attendances.forEach((a) => {
         if (!chamadasPorAluno.has(a.studentId)) chamadasPorAluno.set(a.studentId, []);
@@ -249,9 +230,14 @@ export class ChatController {
         );
         const pendenciasAbertas = incidentesAluno.filter((i: any) => i.type === 'PENDENCIA');
 
+        const dataNascFinal = s.birthDate || (ficha.birthDate ? new Date(ficha.birthDate) : null);
+        const idade = calcularIdade(dataNascFinal);
+
         return {
           nome: s.name,
           matricula: s.registration,
+          dataNascimento: dataNascFinal ? new Date(dataNascFinal).toISOString().split('T')[0] : null,
+          idade,
           turma: s.class?.name || 'Sem turma',
           modalidade: s.class?.course || '',
           turno: s.class?.shift || '',
@@ -334,23 +320,25 @@ export class ChatController {
       }
 
       const systemPrompt = `Você é o Assistente Oficial do PresenSee.
-REGRA INVIOLÁVEL: Você deve responder UTILIZANDO EXCLUSIVAMENTE OS DADOS DO BANCO DE DADOS REAL (NeonDB) fornecidos no JSON abaixo.
-É TERMINANTEMENTE PROIBIDO inventar, estimar, supor ou completar informações que não estejam explicitamente presentes nos dados abaixo.
-- Se o usuário apenas cumprimentar (ex: "oi", "olá", "como você se chama?"), apresente-se como Assistente Inteligente do PresenSee e forneça um breve resumo real dos dados cadastrados no banco (como total de alunos, turmas e frequência média).
-- Se um dado solicitado não existir ou estiver vazio/null no banco (por exemplo, nenhuma nota lançada ou nenhum bairro preenchido), informe claramente que ainda não há registros desse dado no banco de dados.
+
+REGRAS DE COMPORTAMENTO E CONCISÃO:
+1. Responda APENAS ao que o usuário perguntou. Nunca despeje estatísticas, listas ou resumos que não foram solicitados.
+2. Se o usuário enviar apenas um cumprimento ou conversa casual (ex: "oi", "olá", "tudo bem?", "como você se chama?"), responda de forma curta, simpática e natural em 1 frase (ex: "Olá! Sou o assistente do PresenSee. Como posso ajudar você hoje?") e deixe "grafico": null — SEM listar dados da escola.
+3. Quando o usuário fizer uma pergunta específica ou pedir um gráfico, utilize EXCLUSIVAMENTE os dados reais do banco de dados (NeonDB) fornecidos no JSON abaixo. Nunca invente ou estime números que não existam no JSON.
+4. Se um dado específico solicitado estiver vazio/null para todos os registros no banco (por exemplo, nenhuma idade ou nota cadastrada), informe objetivamente que ainda não há registros desse campo no banco.
 
 REGRAS DE CÁLCULO DO PRESENSEE:
-1. Faltas justificadas/abonadas (PRESENT ou EXCUSED) contam como presença válida no cálculo da frequência.
-2. Classificação de risco: Frequência >= 90% = "Baixo", entre 75% e 89% = "Médio", < 75% = "Alto".
+- Faltas justificadas/abonadas (PRESENT ou EXCUSED) contam como presença válida na frequência.
+- Risco de evasão: Frequência >= 90% = "Baixo", entre 75% e 89% = "Médio", < 75% = "Alto".
 
 FORMATO DE RESPOSTA OBRIGATÓRIO (JSON válido):
 {
-  "texto": "Resposta objetiva em português do Brasil baseada apenas nos registros reais do banco.",
+  "texto": "Resposta direta e objetiva em português do Brasil.",
   "grafico": null
 }
 
 REGRAS PARA GRÁFICOS:
-- Preencha "grafico" apenas quando o usuário pedir um gráfico/comparação/distribuição E houver dados reais no JSON abaixo para construí-lo:
+- Preencha "grafico" somente se o usuário pedir um gráfico, comparação ou visualização E houver dados reais no JSON abaixo:
 {
   "titulo": "Título objetivo",
   "subtitulo": "Subtítulo descritivo",
@@ -361,8 +349,7 @@ REGRAS PARA GRÁFICOS:
     { "nome": "Rótulo Real", "valor": 100 }
   ]
 }
-- Para gráficos de dispersão ("dispersao"), cada item em "dados" deve ter { "x": numero, "y": numero, "nome": "Nome Real" }.
-- Se não houver registros reais suficientes para gerar o gráfico pedido, retorne "grafico": null e explique no "texto" o que falta cadastrar no sistema.
+- Para "dispersao", cada item em "dados" deve ter { "x": numero, "y": numero, "nome": "Nome Real" }.
 
 DADOS REAIS EXTRAÍDOS DO NEONDB:
 ${JSON.stringify(contextoBancoReal)}`;
@@ -384,11 +371,10 @@ ${JSON.stringify(contextoBancoReal)}`;
 
       mensagensChat.push({ role: 'user', content: String(mensagem).trim() });
 
-      const modelosDisponiveis = await obterModelosGroqDisponiveis(apiKey);
       let groqResponse: globalThis.Response | null = null;
       let ultimoErro = '';
 
-      for (const modelo of modelosDisponiveis.slice(0, 3)) {
+      for (const modelo of MODELOS_CHAT_GROQ) {
         const tentativa = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
           method: 'POST',
           headers: {
@@ -410,17 +396,11 @@ ${JSON.stringify(contextoBancoReal)}`;
 
         ultimoErro = `(${tentativa.status} - ${modelo}): ${await tentativa.text()}`;
         console.error('Tentativa Groq falhou:', ultimoErro);
-
-        if (tentativa.status !== 404) {
-          return res.status(502).json({
-            error: `Erro na Groq API ${ultimoErro}`,
-          });
-        }
       }
 
       if (!groqResponse || !groqResponse.ok) {
         return res.status(502).json({
-          error: `Nenhum modelo Groq respondeu ${ultimoErro}`,
+          error: `Falha ao consultar a IA no momento. Detalhe: ${ultimoErro}`,
         });
       }
 
