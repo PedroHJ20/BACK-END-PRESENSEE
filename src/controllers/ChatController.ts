@@ -8,6 +8,16 @@ function isPresenteOuAbonado(status: string): boolean {
   return status === 'PRESENT' || status === 'EXCUSED';
 }
 
+function extrairFichaCadastro(incidents: Array<{ type: string; description: string }>) {
+  const ficha = incidents.find((i) => i.type === 'FICHA_CADASTRO');
+  if (!ficha?.description) return {};
+  try {
+    return JSON.parse(ficha.description);
+  } catch {
+    return {};
+  }
+}
+
 export class ChatController {
   static async ask(req: Request, res: Response) {
     try {
@@ -31,14 +41,21 @@ export class ChatController {
       const filtroEscola =
         user.role !== 'ADMIN' && user.escolaId ? { escolaId: user.escolaId } : {};
 
-      // Coleta dados reais da instituição no banco para embasar respostas e gráficos
-      const [students, classes, events, incidents] = await Promise.all([
+      // Consulta diretamente o banco de dados real no NeonDB via Prisma
+      const [escolaInfo, students, classes, events, incidents] = await Promise.all([
+        user.escolaId
+          ? prisma.escola.findUnique({
+              where: { id: user.escolaId },
+              select: { nome: true, cidade: true, estado: true },
+            })
+          : Promise.resolve(null),
         prisma.student.findMany({
           where: filtroEscola,
           include: {
             class: true,
             attendances: true,
             grades: true,
+            incidents: true,
             alerts: { where: { status: 'PENDING' } },
           },
         }),
@@ -53,19 +70,20 @@ export class ChatController {
         prisma.event.findMany({
           where: filtroEscola,
           orderBy: { startDate: 'desc' },
-          take: 15,
         }),
         prisma.incident.findMany({
           where: {
             ...filtroEscola,
             NOT: { type: { in: ['FICHA_CADASTRO', 'CONFIG_HORARIO_AULA'] } },
           },
+          include: {
+            student: { select: { name: true, registration: true } },
+          },
           orderBy: { date: 'desc' },
-          take: 25,
         }),
       ]);
 
-      // Resume alunos com frequência real (PRESENT + EXCUSED = presença) e média de notas
+      // Consolida todos os dados reais dos estudantes (frequência, risco, notas, bairro/cidade, ocorrências)
       const resumoAlunos = students.map((s) => {
         const totalChamadas = s.attendances.length;
         const presencas = s.attendances.filter((a) => isPresenteOuAbonado(a.status)).length;
@@ -81,17 +99,31 @@ export class ChatController {
               )
             : null;
 
+        const ficha = extrairFichaCadastro(s.incidents);
+        const ocorrenciasVisiveis = s.incidents.filter(
+          (i) => !['FICHA_CADASTRO', 'CONFIG_HORARIO_AULA', 'PENDENCIA', 'RESOLVIDO'].includes(i.type)
+        );
+        const pendenciasAbertas = s.incidents.filter((i) => i.type === 'PENDENCIA');
+
         return {
           nome: s.name,
           matricula: s.registration,
           turma: s.class?.name || 'Sem turma',
           modalidade: s.class?.course || '',
           turno: s.class?.shift || '',
+          sexo: ficha.gender || null,
+          bairro: ficha.bairro || null,
+          cidade: ficha.cidade || null,
+          estado: ficha.estado || null,
           frequencia,
           risco,
+          totalChamadas,
+          presencasEfetivas: presencas,
           faltasNaoJustificadas,
           justificadas,
           mediaNotas,
+          totalOcorrencias: ocorrenciasVisiveis.length,
+          pendenciasAbertas: pendenciasAbertas.length,
           alertasPendentes: s.alerts.length,
         };
       });
@@ -107,12 +139,15 @@ export class ChatController {
           turma: c.name,
           modalidade: c.course,
           turno: c.shift,
+          ano: c.year,
           totalAlunos: c.students.length,
           frequenciaMedia: total > 0 ? Math.round((presentes / total) * 100) : 100,
         };
       });
 
-      const contextoEscolar = {
+      const contextoBancoReal = {
+        fonte: 'Banco de dados real PostgreSQL (NeonDB)',
+        escola: escolaInfo || 'Visão Global (Administrador)',
         totalAlunos: resumoAlunos.length,
         distribuicaoRisco: {
           Baixo: resumoAlunos.filter((a) => a.risco === 'Baixo').length,
@@ -121,7 +156,7 @@ export class ChatController {
         },
         turmas: resumoTurmas,
         alunos: resumoAlunos,
-        proximosOuRecentesEventos: events.map((e) => ({
+        eventosEscolares: events.map((e) => ({
           titulo: e.title,
           tipo: e.type,
           abonaFalta: e.excusesAbsence,
@@ -129,38 +164,45 @@ export class ChatController {
           inicio: e.startDate.toISOString().split('T')[0],
           fim: e.endDate.toISOString().split('T')[0],
         })),
-        totalOcorrenciasRecentes: incidents.length,
+        ocorrenciasRegistradas: incidents.slice(0, 40).map((inc) => ({
+          aluno: inc.student?.name || 'Geral',
+          tipo: inc.type,
+          data: inc.date.toISOString().split('T')[0],
+          resolvida: inc.type === 'RESOLVIDO',
+        })),
       };
 
-      const systemPrompt = `Você é o Assistente Inteligente do PresenSee (sistema escolar de monitoramento de frequência biométrica e prevenção à evasão escolar).
-Responda SEMPRE em português do Brasil, de forma clara, objetiva e profissional, usando EXCLUSIVAMENTE os dados reais fornecidos no contexto escolar abaixo.
+      const systemPrompt = `Você é o Assistente Oficial do PresenSee.
+REGRA INVIOLÁVEL: Você deve responder UTILIZANDO EXCLUSIVAMENTE OS DADOS DO BANCO DE DADOS REAL (NeonDB) fornecidos no JSON abaixo.
+É TERMINANTEMENTE PROIBIDO inventar, estimar, supor ou completar informações que não estejam explicitamente presentes nos dados abaixo. Se um dado solicitado não existir ou estiver vazio/null no banco (por exemplo, nenhuma nota lançada ou nenhum bairro preenchido), informe claramente ao usuário que ainda não há registros desse dado no banco de dados.
 
-REGRAS DE NEGÓCIO DO PRESENSEE:
-1. Faltas justificadas/abonadas (atestados ou eventos escolares com abono) contam como presença válida no cálculo de frequência.
-2. Níveis de risco de evasão: Frequência >= 90% = "Baixo", entre 75% e 89% = "Médio", < 75% = "Alto".
-3. Você DEVE responder estritamente em formato JSON válido com a estrutura:
+REGRAS DE CÁLCULO DO PRESENSEE:
+1. Faltas justificadas/abonadas (atestados ou eventos com abono) contam como presença válida no cálculo da frequência.
+2. Classificação de risco: Frequência >= 90% = "Baixo", entre 75% e 89% = "Médio", < 75% = "Alto".
+
+FORMATO DE RESPOSTA OBRIGATÓRIO (JSON válido):
 {
-  "texto": "Sua resposta textual clara e direta aqui.",
+  "texto": "Resposta objetiva em português do Brasil baseada apenas nos registros reais do banco.",
   "grafico": null
 }
-4. QUANDO O USUÁRIO PEDIR UM GRÁFICO, VISUALIZAÇÃO, COMPARAÇÃO OU DISTRIBUIÇÃO (ou quando um gráfico enriquecer claramente a análise solicitada), preencha o campo "grafico" seguindo EXATAMENTE este contrato:
+
+REGRAS PARA GRÁFICOS:
+- Preencha "grafico" apenas quando o usuário pedir um gráfico/comparação/distribuição E houver dados reais no JSON abaixo para construí-lo:
 {
-  "titulo": "Título curto do gráfico",
-  "subtitulo": "Descrição curta do que está sendo medido",
+  "titulo": "Título objetivo",
+  "subtitulo": "Subtítulo descritivo",
   "tipo": "colunas" | "barras" | "linha" | "area" | "pizza" | "dispersao",
-  "eixoX": "Nome opcional do eixo X (obrigatório se tipo for dispersao)",
-  "eixoY": "Nome opcional do eixo Y (obrigatório se tipo for dispersao)",
+  "eixoX": "Nome do eixo X (para dispersao)",
+  "eixoY": "Nome do eixo Y (para dispersao)",
   "dados": [
-    // Para "colunas", "barras", "linha", "area", "pizza":
-    { "nome": "Rótulo", "valor": 85 }
-    // Para "dispersao" (ex: Frequência x Notas):
-    // { "x": 92, "y": 8.5, "nome": "Nome do Aluno" }
+    { "nome": "Rótulo Real", "valor": 100 }
   ]
 }
-5. Se não houver dados numéricos suficientes para um gráfico específico (ex: nenhuma nota lançada para dispersão), explique isso educadamente no campo "texto" e deixe "grafico": null. Nunca invente alunos ou números fictícios.
+- Para gráficos de dispersão ("dispersao"), cada item em "dados" deve ter { "x": numero, "y": numero, "nome": "Nome Real" }.
+- Se não houver registros reais suficientes para gerar o gráfico pedido, retorne "grafico": null e explique no "texto" o que falta cadastrar no sistema.
 
-DADOS REAIS DA ESCOLA:
-${JSON.stringify(contextoEscolar)}`;
+DADOS REAIS EXTRAÍDOS DO NEONDB:
+${JSON.stringify(contextoBancoReal)}`;
 
       const mensagensChat: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         { role: 'system', content: systemPrompt },
@@ -188,7 +230,7 @@ ${JSON.stringify(contextoEscolar)}`;
         body: JSON.stringify({
           model: GROQ_MODEL,
           messages: mensagensChat,
-          temperature: 0.2,
+          temperature: 0,
           response_format: { type: 'json_object' },
         }),
       });
@@ -222,7 +264,7 @@ ${JSON.stringify(contextoEscolar)}`;
           : null;
 
       return res.json({
-        texto: parsed.texto || 'Análise concluída.',
+        texto: parsed.texto || 'Consulta concluída.',
         grafico: graficoValido,
       });
     } catch (error) {
