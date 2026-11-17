@@ -3,11 +3,14 @@ import { prisma } from '../lib/prisma.js';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
-const MODELOS_CHAT_GROQ = [
+const MODELOS_PREFERIDOS = [
   'llama-3.3-70b-versatile',
   'llama-3.1-8b-instant',
   'meta-llama/llama-4-scout-17b-16e-instruct',
+  'meta-llama/llama-4-maverick-17b-128e-instruct',
   'qwen/qwen3-32b',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
 ];
 
 function isPresenteOuAbonado(status: string): boolean {
@@ -35,6 +38,49 @@ function calcularIdade(birthDate: Date | null | undefined): number | null {
     idade--;
   }
   return idade >= 0 ? idade : null;
+}
+
+async function obterModelosGroqTexto(apiKey: string): Promise<{
+  candidatos: string[];
+  todosAtivos: string[];
+}> {
+  try {
+    const resp = await fetch(`${GROQ_BASE_URL}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!resp.ok) {
+      return { candidatos: MODELOS_PREFERIDOS, todosAtivos: [] };
+    }
+
+    const json = (await resp.json()) as { data?: Array<{ id: string }> };
+    const todosAtivos = (json.data || []).map((m) => m.id);
+
+    // Exclui modelos que não são chat de texto (áudio, TTS, moderação, embeddings)
+    const modelosTexto = todosAtivos.filter((id) => {
+      const lower = id.toLowerCase();
+      return (
+        !lower.includes('whisper') &&
+        !lower.includes('orpheus') &&
+        !lower.includes('tts') &&
+        !lower.includes('guard') &&
+        !lower.includes('embed') &&
+        !lower.includes('distil-whisper')
+      );
+    });
+
+    if (modelosTexto.length === 0) {
+      return { candidatos: [], todosAtivos };
+    }
+
+    const ordenados = [
+      ...MODELOS_PREFERIDOS.filter((m) => modelosTexto.includes(m)),
+      ...modelosTexto.filter((m) => !MODELOS_PREFERIDOS.includes(m)),
+    ];
+
+    return { candidatos: ordenados, todosAtivos };
+  } catch {
+    return { candidatos: MODELOS_PREFERIDOS, todosAtivos: [] };
+  }
 }
 
 export class ChatController {
@@ -371,10 +417,21 @@ ${JSON.stringify(contextoBancoReal)}`;
 
       mensagensChat.push({ role: 'user', content: String(mensagem).trim() });
 
+      const { candidatos, todosAtivos } = await obterModelosGroqTexto(apiKey);
+      console.log('Modelos Groq ativos na chave:', todosAtivos);
+
+      if (candidatos.length === 0) {
+        return res.status(502).json({
+          error: `Nenhum modelo de chat de texto está habilitado nesta chave Groq. Modelos ativos no projeto: ${
+            todosAtivos.join(', ') || 'nenhum'
+          }. Habilite os modelos em console.groq.com > Settings > Limits.`,
+        });
+      }
+
       let groqResponse: globalThis.Response | null = null;
       let ultimoErro = '';
 
-      for (const modelo of MODELOS_CHAT_GROQ) {
+      for (const modelo of candidatos) {
         const tentativa = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
           method: 'POST',
           headers: {
@@ -400,7 +457,7 @@ ${JSON.stringify(contextoBancoReal)}`;
 
       if (!groqResponse || !groqResponse.ok) {
         return res.status(502).json({
-          error: `Falha ao consultar a IA no momento. Detalhe: ${ultimoErro}`,
+          error: `Nenhum modelo de texto respondeu na Groq. Verifique as permissões dos modelos em console.groq.com. Último erro: ${ultimoErro}`,
         });
       }
 
